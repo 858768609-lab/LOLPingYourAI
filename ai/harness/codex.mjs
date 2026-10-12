@@ -1,0 +1,84 @@
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { EventEmitter } from 'node:events';
+
+export class CodexAdapter extends EventEmitter {
+  constructor({ command = 'codex', cwd, mcp, skillPath }) { super(); Object.assign(this, { command, cwd, mcp, skillPath }); this.pending = new Map(); this.active = new Map(); this.nextId = 1; this.loaded = new Set(); }
+  async connect() {
+    if (this.child) return;
+    const args = ['app-server', '--listen', 'stdio://', '-c', 'mcp_servers.lolpingyourai.default_tools_approval_mode="approve"'];
+    const entries = { command: this.mcp.command, args: this.mcp.args, env_vars: Object.keys(this.mcp.env) };
+    for (const [key, value] of Object.entries(entries)) {
+      if (key === 'env') { for (const [k, v] of Object.entries(value)) args.push('-c', `mcp_servers.lolpingyourai.env.${k}=${JSON.stringify(v)}`); }
+      else args.push('-c', `mcp_servers.lolpingyourai.${key}=${JSON.stringify(value)}`);
+    }
+    const child = this.child = spawn(this.command, args, { cwd: this.cwd, env: { ...process.env, ...this.mcp.env }, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+    child.stderr.on('data', data => this.emit('diagnostic', data.toString().slice(0, 3000)));
+    child.on('error', error => this.fail(error));
+    child.on('exit', () => { this.child = null; this.loaded.clear(); this.active.clear(); this.fail(new Error('Codex app-server exited')); });
+    createInterface({ input: child.stdout }).on('line', line => {
+      let message; try { message = JSON.parse(line); } catch { return; }
+      if (message.id !== undefined && this.pending.has(message.id)) {
+        const pending = this.pending.get(message.id); this.pending.delete(message.id); clearTimeout(pending.timer);
+        message.error ? pending.reject(new Error(message.error.message)) : pending.resolve(message.result); return;
+      }
+      if (message.method === 'turn/started') this.active.set(message.params.threadId, message.params.turn.id);
+      if (message.method === 'turn/completed') { this.active.delete(message.params.threadId); this.emit('completed', message.params); }
+      if (message.id !== undefined && message.method) {
+        this.emit('approval', message);
+        // Never silently accept a harness approval. Surface it to the desktop UI.
+        return;
+      }
+      this.emit('event', message);
+    });
+    await this.rpc('initialize', { clientInfo: { name: 'lolpingyourai', title: 'LOLPingYourAI', version: '0.1.0' }, capabilities: { experimentalApi: true } });
+    child.stdin.write(JSON.stringify({ method: 'initialized', params: {} }) + '\n');
+  }
+  fail(error) { for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(error); } this.pending.clear(); this.emit('failure', error); }
+  rpc(method, params) {
+    return new Promise((resolve, reject) => {
+      if (!this.child?.stdin.writable) return reject(new Error('Codex is not connected'));
+      const id = this.nextId++;
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`Codex ${method} timed out`)); }, 60000);
+      this.pending.set(id, { resolve, reject, timer });
+      this.child.stdin.write(JSON.stringify({ id, method, params }) + '\n');
+    });
+  }
+  respond(id, result) { this.child?.stdin.write(JSON.stringify({ id, result }) + '\n'); }
+  async capabilities() {
+    await this.connect();
+    const status = await this.rpc('mcpServerStatus/list', { limit: 100, detail: 'toolsAndAuthOnly' });
+    const native = (status.data ?? []).filter(s => /cua|computer.use/i.test(s.name)).map(s => s.name);
+    return { images: true, steer: true, interrupt: true, desktop: 'project-mcp', nativeDesktop: native.length ? 'detected-not-validated-for-scoped-cancellation' : 'unavailable', nativeServers: native };
+  }
+  async create() {
+    await this.connect();
+    const result = await this.rpc('thread/start', { cwd: this.cwd, approvalPolicy: 'on-request', sandbox: 'workspace-write' });
+    this.loaded.add(result.thread.id); return result.thread.id;
+  }
+  async resume(id) { await this.connect(); if (!this.loaded.has(id)) { await this.rpc('thread/resume', { threadId: id }); this.loaded.add(id); } return id; }
+  async list() { await this.connect(); return (await this.rpc('thread/list', { limit: 30, cwd: this.cwd })).data ?? []; }
+  async send(id, prompt, image) {
+    const input = [{ type: 'text', text: `$lolping-your-ai\n${prompt}` }, { type: 'skill', name: 'lolping-your-ai', path: this.skillPath }];
+    if (image) input.push({ type: 'localImage', path: image });
+    const result = await this.rpc('turn/start', { threadId: id, input });
+    this.active.set(id, result.turn.id); return result.turn.id;
+  }
+  async steer(id, prompt, image) {
+    const turn = this.active.get(id); if (!turn) return this.send(id, prompt, image);
+    const input = [{ type: 'text', text: prompt }]; if (image) input.push({ type: 'localImage', path: image });
+    try { return await this.rpc('turn/steer', { threadId: id, expectedTurnId: turn, input }); }
+    catch (error) { if (!this.active.has(id)) return this.send(id, prompt, image); throw error; }
+  }
+  async cancel(id) {
+    const turn = this.active.get(id); if (!turn) return;
+    let listener, timer;
+    const finished = new Promise((resolve, reject) => {
+      listener = p => { if (p.threadId === id && p.turn.id === turn) resolve(); };
+      this.on('completed', listener); timer = setTimeout(() => reject(new Error('Codex has not confirmed cancellation')), 15000);
+    });
+    try { await this.rpc('turn/interrupt', { threadId: id, turnId: turn }); await finished; }
+    finally { this.off('completed', listener); clearTimeout(timer); }
+  }
+  close() { this.child?.kill(); }
+}

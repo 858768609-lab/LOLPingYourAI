@@ -1,0 +1,39 @@
+# Architecture and protocol
+
+`native input → Electron overlay → confirmed local ping → capture → Teammate → HarnessAdapter → MCP → scoped desktop helper`
+
+The inherited C++ helper implements press–drag–release, cancellation and input passthrough. Each display has an inactive overlay. Confirmed pings use display-local logical coordinates converted once into global logical coordinates. Agent replies use `spawnRemote` and cannot re-enter the user queue. Network room transports and the upstream updater are not instantiated.
+
+## Capture and target identity
+
+A ping selects a window ID plus owning PID, window bounds and a normalized anchor within that window. The focus is a configurable 512×512 logical-pixel square. Retina screen images are resampled to one image pixel per logical pixel. Negative display coordinates and edge padding are explicit in `region.valid`, `region.padding`, `region.scaleFactor` and `imageScale`. Overlay windows are hidden during capture and restored inactive.
+
+Each action resolves the window identity again. Coordinate actions are rejected after a bounds change until a new screenshot. Closing a window fails the visit rather than using stale coordinates. Type/key actions require the selected window to acquire foreground control. The focus square does not restrict relevant controls elsewhere in that same window.
+
+## Sessions and cancellation
+
+Each harness has one persistent teammate identity. Human activity timestamps are separate from timers and agent replies. After T hours of user inactivity, a new user ping safely interrupts the old turn, creates a new thread and supplies the saved goal/progress/next-step summary. Existing unrelated chats use explicit task handoff; the demo never claims to own an external session.
+
+Codex uses App Server JSON-RPC: initialize, thread/start, thread/resume, turn/start, turn/steer and turn/interrupt. Loaded thread IDs are cached per child process: resuming a freshly created thread can fail because its rollout does not exist yet. A process restart clears this cache. Skill input is explicit, and a copy is installed under the runtime workspace's `.agents/skills`.
+
+Claude uses the Agent SDK async message stream with sessionId/resume, image blocks, project MCP and interrupt. Programmatic native Claude Computer Use is not assumed: its documented macOS interactive feature is not available in `-p` mode. The current implementation uses project MCP on both platforms.
+
+One action gate serializes desktop operations. Warning/retreat invalidate the generation immediately, revoke new actions, request harness interruption and wait for confirmation and in-flight compatible actions. A timeout reports an unconfirmed stop. An old queued capture/session creation cannot re-enable the gate. A regular observe ping cannot click/type. This protects the cooperating project backend; it is not an OS sandbox around arbitrary tools a user adds to a harness.
+
+## Local bridge and state
+
+MCP is stdio; its child receives a random per-launch capability token for a loopback HTTP broker. Browser Origin requests and unauthenticated calls are rejected. Settings IPC validates its sender. MCP exposes only context/screenshot/action/reply/ward/handoff/icon tools, while the local CLI also has configuration and session operations. User text travels as JSON and process argument arrays, never interpolated shell commands.
+
+State lives in the application data directory, with atomic JSON replacement and restrictive POSIX permissions. Captures, tokens, session IDs and local icons never belong in Git. Event receipts survive restart. Wards persist independently: pending visits survive restart/sleep, lock waits, completed/failed/cancelled visits are not repeated. An interrupted `visiting` record becomes `uncertain` for review instead of silently repeating an operation.
+
+## Extending
+
+- `ai/config.mjs`: defaults and mappings; the skill reads effective runtime config.
+- `ai/service.mjs`: routing, task ownership, interruption and session handoff.
+- `ai/harness/`: Codex/Claude adapters.
+- `ai/desktop.mjs`, `native/desktop/`: captures and platform input.
+- `ai/server.mjs`, `ai/mcp.mjs`: broker and MCP schema.
+- `src/main/teammate.ts`: Electron lifecycle and settings integration.
+- `skills/lolping-your-ai/SKILL.md`: teammate behavior.
+
+Official references: [Codex App Server](https://learn.chatgpt.com/docs/app-server), [Claude Computer Use](https://code.claude.com/docs/en/computer-use). Native Codex Computer Use is detected, but the demo selects the project backend so coordinate mapping and cancellation share one gate. This is an intentional compatibility choice; native backend cancellation integration remains future work.

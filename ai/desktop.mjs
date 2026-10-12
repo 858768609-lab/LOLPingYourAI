@@ -1,0 +1,94 @@
+import { spawn } from 'node:child_process';
+import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
+import { join } from 'node:path';
+import sharp from 'sharp';
+import { squareRegion, windowAnchor, anchoredPoint } from './geometry.mjs';
+
+export class Desktop {
+  constructor({ electron, helper, dataDir, overlays, pingIds }) { Object.assign(this, { electron, helper, dataDir, overlays, pingIds }); this.savedBounds = new Map(); this.captureTail = Promise.resolve(); }
+  native(op, args = {}) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(this.helper, [op], { stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+      let output = '', error = ''; const timer = setTimeout(() => child.kill(), 15000);
+      child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { error += d; });
+      child.on('error', e => { clearTimeout(timer); reject(e); });
+      child.on('close', code => { clearTimeout(timer); try { const data = JSON.parse(output); data.error || code ? reject(new Error(data.error ?? error)) : resolve(data); } catch { reject(new Error(error || `Desktop helper exited (${code})`)); } });
+      child.stdin.end(JSON.stringify({ ...args, excludePid: process.pid }));
+    });
+  }
+  async doctor() { return { ...await this.native('doctor'), helper: this.helper }; }
+  async available() { try { const d = await this.doctor(); return !d.locked && d.screenRecording; } catch { return false; } }
+  toNativePoint(p) { return process.platform === 'win32' ? this.electron.screen.dipToScreenPoint(p) : p; }
+  normalizeWindow(w) {
+    if (process.platform !== 'win32') return w;
+    return { ...w, bounds: this.electron.screen.screenToDipRect(null, w.bounds) };
+  }
+  async resolve(target) { return this.normalizeWindow(await this.native('resolve', { id: target.id, pid: target.pid })); }
+  capture(pointOrTarget, size, tracked = false) {
+    const job = this.captureTail.then(() => this.captureNow(pointOrTarget, size, tracked));
+    this.captureTail = job.catch(() => {}); return job;
+  }
+  async captureNow(pointOrTarget, size, tracked) {
+    if (!await this.available()) throw new Error('Screen recording permission is missing or desktop is locked');
+    if (!pointOrTarget) throw new Error('No target has been selected');
+    const { screen, desktopCapturer } = this.electron;
+    let target, point;
+    if (tracked) { const w = await this.resolve(pointOrTarget); target = { ...w, relative: pointOrTarget.relative }; point = anchoredPoint(target, w.bounds); }
+    else { point = pointOrTarget; const w = this.normalizeWindow(await this.native('target', this.toNativePoint(point))); target = windowAnchor(w, point); }
+    const display = screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) });
+    const region = squareRegion(point, size, { ...display.bounds, scaleFactor: display.scaleFactor });
+    const png = await this.overlays.captureWithoutOverlays(async () => {
+      const owner = await this.native('target', this.toNativePoint(point));
+      const useWindow = tracked || owner.id !== target.id;
+      const captureBounds = useWindow ? target.bounds : display.bounds;
+      const sources = await desktopCapturer.getSources({ types: [useWindow ? 'window' : 'screen'], thumbnailSize: { width: Math.round(captureBounds.width * display.scaleFactor), height: Math.round(captureBounds.height * display.scaleFactor) } });
+      const source = sources.find(s => useWindow ? s.id.split(':')[1] === String(target.id) : s.display_id === String(display.id));
+      if (useWindow) {
+        const x = Math.max(region.valid.x, target.bounds.x), y = Math.max(region.valid.y, target.bounds.y);
+        const right = Math.min(region.valid.x + region.valid.width, target.bounds.x + target.bounds.width), bottom = Math.min(region.valid.y + region.valid.height, target.bounds.y + target.bounds.height);
+        region.valid = { x: Math.round(x), y: Math.round(y), width: Math.round(right - x), height: Math.round(bottom - y) };
+        region.padding = { left: Math.round(x - region.x), top: Math.round(y - region.y) };
+        region.captureKind = 'window';
+      } else region.captureKind = 'screen';
+      if (!source || source.thumbnail.isEmpty()) throw new Error('No screenshot for target display');
+      const image = source.thumbnail, actual = image.getSize(), sx = actual.width / captureBounds.width, sy = actual.height / captureBounds.height;
+      const extract = { left: Math.max(0, Math.round((region.valid.x - captureBounds.x) * sx)), top: Math.max(0, Math.round((region.valid.y - captureBounds.y) * sy)), width: Math.round(region.valid.width * sx), height: Math.round(region.valid.height * sy) };
+      extract.width = Math.min(extract.width, actual.width - extract.left); extract.height = Math.min(extract.height, actual.height - extract.top);
+      if (extract.width < 1 || extract.height < 1) throw new Error('Target region is outside the display');
+      const cropped = await sharp(image.toPNG()).extract(extract).resize(region.valid.width, region.valid.height).png().toBuffer();
+      return sharp({ create: { width: size, height: size, channels: 4, background: '#151922' } }).composite([{ input: cropped, left: region.padding.left, top: region.padding.top }]).png().toBuffer();
+    });
+    region.imageScale = 1; region.imageWidth = size; region.imageHeight = size;
+    const dir = join(this.dataDir, 'captures'); await mkdir(dir, { recursive: true, mode: 0o700 });
+    const imagePath = join(dir, `ping-${Date.now()}.png`); await writeFile(imagePath, png, { mode: 0o600 });
+    // Keep a bounded local diagnostic history; never delete the just-captured image.
+    const old = (await readdir(dir)).filter(f => /^ping-\d+\.png$/.test(f)).sort().slice(0, -100);
+    await Promise.all(old.map(f => unlink(join(dir, f)).catch(() => {})));
+    return { target, region, imagePath };
+  }
+  async reply({ signal, target, at, caption }) {
+    const point = at === 'cursor' ? this.electron.screen.getCursorScreenPoint() : anchoredPoint(target, (await this.resolve(target)).bounds);
+    const display = this.electron.screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) });
+    this.overlays.spawnRemote({ id: this.pingIds[signal] ?? 'generic', displayId: display.id, x: point.x - display.bounds.x, y: point.y - display.bounds.y, tag: { name: caption || 'AI', color: 4 } });
+  }
+  async action(args, context) {
+    const target = await this.resolve(context.target), identity = { id: target.id, pid: target.pid };
+    if (['click', 'scroll'].includes(args.action)) {
+      if (![args.x, args.y].every(Number.isFinite)) throw new Error('x and y must be finite global logical coordinates');
+      if (JSON.stringify(target.bounds) !== JSON.stringify(context.target.bounds)) throw new Error('Window moved. Take a fresh screenshot before acting.');
+      if (args.x < target.bounds.x || args.x >= target.bounds.x + target.bounds.width || args.y < target.bounds.y || args.y >= target.bounds.y + target.bounds.height) throw new Error('Point is outside the target window');
+      return this.native(args.action, { ...identity, ...this.toNativePoint({ x: args.x, y: args.y }), button: args.button, delta: Math.max(-2000, Math.min(2000, Number(args.delta) || 0)) });
+    }
+    if (args.action === 'type') { if (typeof args.text !== 'string' || args.text.length > 10000) throw new Error('Invalid text'); return this.native('type', { ...identity, text: args.text }); }
+    if (args.action === 'key') { if (typeof args.key !== 'string' || args.key.length > 50) throw new Error('Invalid key'); return this.native('key', { ...identity, key: args.key }); }
+    if (['maximize', 'restore'].includes(args.action)) {
+      let bounds;
+      const key = `${target.pid}:${target.id}`;
+      if (args.action === 'maximize') { if (!this.savedBounds.has(key)) this.savedBounds.set(key, target.bounds); bounds = this.electron.screen.getDisplayMatching(target.bounds).workArea; }
+      else { bounds = this.savedBounds.get(key); if (!bounds) throw new Error('No original window bounds saved'); }
+      const result = await this.native('resize', { ...identity, bounds: process.platform === 'win32' ? this.electron.screen.dipToScreenRect(null, bounds) : bounds });
+      if (args.action === 'restore') this.savedBounds.delete(key); return result;
+    }
+    throw new Error('Unknown desktop action');
+  }
+}

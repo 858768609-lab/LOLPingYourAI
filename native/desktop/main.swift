@@ -1,0 +1,121 @@
+import Cocoa
+import ApplicationServices
+
+// Never inherit a user's held modifiers or re-trigger the ping input helper.
+func postInput(_ event: CGEvent, flags: CGEventFlags = []) {
+    event.flags = flags
+    event.setIntegerValueField(.eventSourceUserData, value: 0x4C50494E)
+    event.post(tap: .cghidEventTap)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.025))
+}
+
+func fail(_ message: String) -> Never {
+    let data = try! JSONSerialization.data(withJSONObject: ["error": message])
+    print(String(data: data, encoding: .utf8)!); exit(1)
+}
+func number(_ d: [String: Any], _ key: String) -> Double { (d[key] as? NSNumber)?.doubleValue ?? 0 }
+func windows(_ exclude: Int32) -> [[String: Any]] {
+    let raw = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+    return raw.compactMap { w in
+        guard let pid = w[kCGWindowOwnerPID as String] as? Int32, pid != exclude,
+              (w[kCGWindowLayer as String] as? Int) == 0,
+              let b = w[kCGWindowBounds as String] as? [String: Any], number(b, "Width") > 1, number(b, "Height") > 1,
+              let id = w[kCGWindowNumber as String] as? NSNumber else { return nil }
+        return ["id": id.stringValue, "pid": pid, "app": w[kCGWindowOwnerName as String] ?? "", "title": w[kCGWindowName as String] ?? "", "bounds": ["x": number(b, "X"), "y": number(b, "Y"), "width": number(b, "Width"), "height": number(b, "Height")]]
+    }
+}
+func axWindow(_ w: [String: Any]) -> AXUIElement {
+    let app = AXUIElementCreateApplication(Int32(number(w, "pid")))
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success, let items = value as? [AXUIElement], let bounds = w["bounds"] as? [String: Any] else { fail("Cannot access target window; grant Accessibility") }
+    let matches = items.filter { item in
+        var p: CFTypeRef?, s: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(item, kAXPositionAttribute as CFString, &p) == .success,
+              AXUIElementCopyAttributeValue(item, kAXSizeAttribute as CFString, &s) == .success else { return false }
+        var point = CGPoint.zero; var size = CGSize.zero
+        guard let pv = p, let sv = s, CFGetTypeID(pv) == AXValueGetTypeID(), CFGetTypeID(sv) == AXValueGetTypeID() else { return false }
+        AXValueGetValue(pv as! AXValue, .cgPoint, &point); AXValueGetValue(sv as! AXValue, .cgSize, &size)
+        return abs(point.x - number(bounds, "x")) < 3 && abs(point.y - number(bounds, "y")) < 3 && abs(size.width - number(bounds, "width")) < 3 && abs(size.height - number(bounds, "height")) < 3
+    }
+    guard matches.count == 1 else { fail("Target window is missing or ambiguous") }
+    return matches[0]
+}
+let op = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "doctor"
+let data = FileHandle.standardInput.readDataToEndOfFile()
+let args = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+let exclude = Int32(number(args, "excludePid"))
+var result: Any = ["ok": true]
+let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+let locked = session?["CGSSessionScreenIsLocked"] as? Bool ?? false
+if op == "doctor" {
+    result = ["accessibility": AXIsProcessTrusted(), "screenRecording": CGPreflightScreenCaptureAccess(), "locked": locked, "platform": "darwin"]
+} else if op == "cursor" {
+    let p = CGEvent(source: nil)?.location ?? .zero; result = ["x": p.x, "y": p.y]
+} else if op == "windows" { result = windows(exclude)
+} else {
+    guard !locked else { fail("Desktop is locked") }
+    let all = windows(exclude)
+    if op == "target" {
+        let p = CGPoint(x: number(args, "x"), y: number(args, "y"))
+        guard let w = all.first(where: { w in let b = w["bounds"] as! [String: Any]; return CGRect(x: number(b, "x"), y: number(b, "y"), width: number(b, "width"), height: number(b, "height")).contains(p) }) else { fail("No target window under this ping") }
+        result = w
+    } else {
+        guard let id = args["id"] as? String, let w = all.first(where: { ($0["id"] as? String) == id && number($0, "pid") == number(args, "pid") }) else { fail("Target window closed or changed") }
+        if op == "resolve" { result = w }
+        else {
+            guard AXIsProcessTrusted() else { fail("Accessibility permission is required") }
+            let ax = axWindow(w)
+            let targetApp = NSRunningApplication(processIdentifier: Int32(number(w, "pid")))
+            targetApp?.activate(options: [.activateIgnoringOtherApps])
+            guard AXUIElementPerformAction(ax, kAXRaiseAction as CFString) == .success else { fail("Cannot focus target window") }
+            let deadline = Date().addingTimeInterval(0.7)
+            while NSWorkspace.shared.frontmostApplication?.processIdentifier != Int32(number(w, "pid")) && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == Int32(number(w, "pid")) else { fail("Target did not acquire foreground control") }
+            if op == "resize" {
+                guard let b = args["bounds"] as? [String: Any] else { fail("Missing window bounds") }
+                var point = CGPoint(x: number(b, "x"), y: number(b, "y")); var size = CGSize(width: number(b, "width"), height: number(b, "height"))
+                let p = AXValueCreate(.cgPoint, &point)!, s = AXValueCreate(.cgSize, &size)!
+                guard AXUIElementSetAttributeValue(ax, kAXPositionAttribute as CFString, p) == .success, AXUIElementSetAttributeValue(ax, kAXSizeAttribute as CFString, s) == .success else { fail("This window cannot be resized") }
+            } else if op == "click" || op == "scroll" {
+                let p = CGPoint(x: number(args, "x"), y: number(args, "y")); let b = w["bounds"] as! [String: Any]
+                guard CGRect(x: number(b, "x"), y: number(b, "y"), width: number(b, "width"), height: number(b, "height")).contains(p) else { fail("Action is outside the target window") }
+                if op == "click" {
+                    let right = (args["button"] as? String) == "right"
+                    CGEvent(mouseEventSource: nil, mouseType: right ? .rightMouseDown : .leftMouseDown, mouseCursorPosition: p, mouseButton: right ? .right : .left)?.post(tap: .cghidEventTap)
+                    CGEvent(mouseEventSource: nil, mouseType: right ? .rightMouseUp : .leftMouseUp, mouseCursorPosition: p, mouseButton: right ? .right : .left)?.post(tap: .cghidEventTap)
+                } else {
+                    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+                    CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: Int32(max(-2000, min(2000, number(args, "delta")))), wheel2: 0, wheel3: 0)?.post(tap: .cghidEventTap)
+                }
+            } else if op == "type" {
+                let text = Array((args["text"] as? String ?? "").utf16)
+                guard text.count <= 10000 else { fail("Text is too long") }
+                for start in stride(from: 0, to: text.count, by: 100) {
+                    let chunk = Array(text[start..<min(start + 100, text.count)])
+                    let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)!, up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false)!
+                    chunk.withUnsafeBufferPointer { down.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: $0.baseAddress!); up.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: $0.baseAddress!) }
+                    postInput(down); postInput(up)
+                }
+            } else if op == "key" {
+                let keys: [String: CGKeyCode] = ["a": 0, "c": 8, "v": 9, "z": 6, "s": 1, "f": 3, "return": 36, "escape": 53, "tab": 48, "backspace": 51, "left": 123, "right": 124, "down": 125, "up": 126, "plus": 24, "=": 24, "-": 27, "0": 29]
+                let parts = (args["key"] as? String ?? "").lowercased().split(separator: "+").map(String.init)
+                guard let last = parts.last, let code = keys[last] else { fail("Unsupported key") }
+                let modifiers: [String: (CGKeyCode, CGEventFlags)] = ["cmd": (55, .maskCommand), "command": (55, .maskCommand), "super": (55, .maskCommand), "ctrl": (59, .maskControl), "control": (59, .maskControl), "shift": (56, .maskShift), "alt": (58, .maskAlternate), "option": (58, .maskAlternate)]
+                var flags: CGEventFlags = []
+                var held: [(CGKeyCode, CGEventFlags)] = []
+                for name in parts.dropLast() {
+                    guard let modifier = modifiers[name] else { fail("Unsupported key modifier") }
+                    held.append(modifier)
+                }
+                for (key, flag) in held { flags.insert(flag); postInput(CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: true)!, flags: flags) }
+                postInput(CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true)!, flags: flags)
+                postInput(CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false)!, flags: flags)
+                for (key, flag) in held.reversed() { flags.remove(flag); postInput(CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: false)!, flags: flags) }
+
+            } else { fail("Unknown desktop operation") }
+        }
+    }
+}
+RunLoop.current.run(until: Date().addingTimeInterval(0.08))
+let output = try! JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
+print(String(data: output, encoding: .utf8)!)

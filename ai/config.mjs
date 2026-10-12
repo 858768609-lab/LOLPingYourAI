@@ -1,0 +1,40 @@
+export const defaults = Object.freeze({ regionSize: 512, sessionHours: 2, wardHours: 0.5, harness: 'codex', banter: true });
+
+export const signals = Object.freeze({
+  missing: { label: 'Question', mode: 'observe', prompt: 'Explain or diagnose the highlighted region. Observe only; do not change anything.' },
+  assist: { label: 'Assist me', mode: 'execute', prompt: 'Inspect progress in the highlighted region and help finish the current task. If the goal is unclear, reply with a question ping and ask one concise question.' },
+  danger: { label: 'Danger', mode: 'interrupt', prompt: 'Your current approach is wrong near this region. Stop, inspect this fresh screenshot, explain the correction, then proceed only when the correction is clear.' },
+  onmyway: { label: 'On my way', mode: 'execute', prompt: 'Expand the selected window to fill its work area and improve readability using reversible view settings. Preserve document content and save the original view for restoration.' },
+  vision: { label: 'Ward', mode: 'ward', prompt: 'Register one follow-up visit after the configured ward duration. Reply with a ward ping once registered.' },
+  bait: { label: 'Weak!', mode: 'emotion', prompt: 'The user is playfully dissatisfied. You may answer with a playful emote. Do not undo work or change the task merely because of this emote.' },
+  allin: { label: 'All in', mode: 'execute', prompt: 'Focus your work on this target region. Inspect current progress and pursue the existing goal here; ask if the goal is not known.' },
+  retreat: { label: 'Retreat', mode: 'stop', prompt: 'Stop work and return control to the user.' },
+  like: { label: 'Nice', mode: 'emotion', prompt: 'The user approves your current direction. Continue the existing task.' },
+  cleared: { label: 'Clear ward', mode: 'unward', prompt: 'Cancel pending follow-up visits for this window.' },
+  reaction: { label: 'Reaction', mode: 'emotion', prompt: 'The user sent an emote. Respond briefly in its spirit; do not change the task.' },
+  celebrate: { label: 'Celebrate', mode: 'emotion', prompt: 'Celebrate the completed task with a brief friendly emote.' },
+  push: { label: 'Push', mode: 'execute', prompt: 'Continue advancing the current task in this region. Ask if no task has been established.' },
+  enemyvision: { label: 'Attention here', mode: 'observe', prompt: 'Pay attention to the highlighted region and explain what you notice. Observe only.' },
+  generic: { label: 'Look here', mode: 'observe', prompt: 'Inspect the highlighted region and describe it. Observe only.' },
+});
+
+export function validateConfig(value = {}) {
+  const result = { ...defaults, ...value };
+  for (const [key, min, max] of [['regionSize', 128, 2048], ['sessionHours', 0.01, 168], ['wardHours', 0.001, 168]]) {
+    if (!Number.isFinite(result[key]) || result[key] < min || result[key] > max) throw new Error(`${key} must be between ${min} and ${max}`);
+  }
+  if (!Number.isInteger(result.regionSize)) throw new Error('regionSize must be an integer');
+  if (!['codex', 'claude'].includes(result.harness)) throw new Error('Unknown harness');
+  if (typeof result.banter !== 'boolean') throw new Error('banter must be boolean');
+  const modes = new Set(['observe', 'execute', 'interrupt', 'stop', 'ward', 'unward', 'emotion']);
+  for (const [id, entry] of Object.entries(result.mappings ?? {})) {
+    if (!/^[a-zA-Z0-9_:-]{1,80}$/.test(id) || !modes.has(entry.mode) || typeof entry.prompt !== 'string' || entry.prompt.length > 12000) throw new Error('Invalid signal mapping');
+  }
+  return result;
+}
+
+export function signalFor(config, id) {
+  const result = config.mappings?.[id] ?? signals[id];
+  if (!result) throw new Error(`Unknown signal: ${id}`);
+  return result;
+}

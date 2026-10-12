@@ -1,0 +1,14 @@
+{
+  "regionSize": 512,
+  "sessionHours": 2,
+  "wardHours": 0.5,
+  "harness": "codex",
+  "banter": true,
+  "mappings": {
+    "missing": {
+      "label": "解释这里",
+      "mode": "observe",
+      "prompt": "请用简短中文解释这个区域，必要时提出一个澄清问题。只观察，不修改。"
+    }
+  }
+}
