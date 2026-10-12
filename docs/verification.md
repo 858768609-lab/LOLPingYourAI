@@ -62,4 +62,16 @@ Environment: Apple Silicon, macOS 26.4, Electron 44.5.1, Codex CLI 0.162.0-alpha
 - Application-specific reading-mode/zoom optimization depends on the agent and target app; maximize/restore is the part verified here.
 - Builds use ad-hoc signing and are not notarized. Replacing a build can invalidate macOS grants; there is no available Developer ID identity on this machine.
 
-No GitHub repository was created or pushed. Default artwork and synthesized tones are original; Riot assets and personal runtime data are not included in the source or package.
+No GitHub repository was created or pushed. The original verification above describes the first build. The later LoL asset/queue revision is recorded below. Personal runtime data remains excluded.
+
+
+## LoL assets and serialized agent replies — later revision, 2026-10-12
+
+- Removed the original geometric pack, its SVG sources and synthesizer script. Replaced application/tray icons with upstream versions. Removed the locally generated Ping Buddy test candidate.
+- Bundled 44 upstream LoL emotes with PNG stills, WebP animations and OGG sounds. All 182 bundled asset files match pinned upstream bytes, including two explicitly named texture aliases. Attribution now excludes game assets from MIT.
+- Agent replies have one FIFO queue across displays. A renderer acknowledges only after both its icon/animation and its actual Web Audio source end (including reported output latency). Stale or wrong-display acknowledgements cannot advance the queue. User pings/previews remain immediate. Agent weak/nice/celebrate replies use original animated emotes and their own OGG sounds.
+- Typecheck passed; Vitest 709 passed / 1 skipped in 44 files; AI tests 22 passed. New regression coverage includes cross-display queue ordering, renderer readiness, stale acknowledgements, removed displays and long audio completion.
+- Real Electron asset decoding passed: 28 textures, 22 WAV sounds and 132 emote files.
+- Real Electron five-reply test exercised the actual OverlayManager, preload, overlay and Web Audio. Maximum concurrent visuals: 1. With a deliberately short 100 ms icon duration, the 980.77 ms sound still governed progression; observed start gaps were about 1009, 1009, 1011 and 3149 ms, with the last gap waiting for the animated emote to disappear. This tests both audio-longer and visual-longer cases.
+- Rebuilt and installed the Mac DMG. Both desktop permissions were confirmed true in the installed application. No Windows execution or subjective sound-quality assessment is claimed.
+- The installed app received real wheel pings after the update. These superseded the optional model-driven diagnostic; the five-item timing evidence above comes from the independent real Electron playback test, not that interrupted model turn.

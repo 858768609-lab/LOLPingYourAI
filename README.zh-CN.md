@@ -45,7 +45,7 @@ Apple Silicon 安装包位于 `release/LOLPingYourAI-0.1.0-arm64.dmg`。将 LOLP
 - 「创作表情」支持正方形裁切、缩放与位置调整、保留透明度、去除纯色背景；描述可以附参考图。
 - 队友优先使用已有图像工具，没有时生成原创 SVG；预览标明实际方式，点击添加后才加入列表。
 - 导入表情可选择并绑定自定义指令；未映射表情只表达情绪。
-- 默认素材全部原创。可选本地素材包用 `textures/*.png`、`sounds/*.wav` 结构，文件名见 `src/shared/pings.ts`，与上游 assets 布局兼容。导入后重启，随时恢复原创素材。第三方素材留在用户数据目录，不进入仓库或安装包。
+- 默认使用上游 lolPing 0.5.1 收录的 LoL 原生信号、音效及 44 个动态表情（含原音效）。此前的原创几何图标和合成音效已删除。本地素材包仍可覆盖默认素材，点击「恢复 LoL 素材」可清除覆盖。游戏素材属于 Riot Games，不适用代码的 MIT 许可。
 
 ## 开发与命令
 
@@ -65,6 +65,7 @@ pnpm test:helper
 pnpm test
 pnpm dist:mac
 pnpm exec electron tools/check-assets.cjs
+pnpm exec electron tools/check-agent-queue.cjs
 # Windows 上执行：pnpm dist
 ```
 
@@ -85,4 +86,6 @@ Mac 数据目录是 `~/Library/Application Support/LOLPingYourAI`，Windows 是 
 
 Codex 用 App Server；Claude 用 Agent SDK＋项目 MCP。检测到原生 Codex Computer Use 时，本 demo 仍使用项目后端，以统一坐标和取消锁；原生后端接入还未完成。Claude 的 macOS 交互式原生 Computer Use 不能当作 Windows／程序化会话的通用实现。SDK 已安装并不代表已登录。
 
-[实测记录](docs/verification.md) 分别列出真实闭环、自动测试与尚未验证的组合。源码和原创素材使用 MIT，保留上游作者署名。本次仅本地交付，没有创建或推送 GitHub 仓库。
+[实测记录](docs/verification.md) 分别列出真实闭环、自动测试与尚未验证的组合。源码使用 MIT，游戏素材保留 Riot Games 权利，保留上游作者署名。本次仅本地交付，没有创建或推送 GitHub 仓库。
+
+Agent 反 ping 使用跨屏统一的先进先出队列：等上一条图标消失且音效实际播放结束后，才展示下一条。可以连续发送多条；用户手动 ping 和预览仍即时响应。

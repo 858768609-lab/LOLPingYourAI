@@ -27,6 +27,7 @@ export interface OverlayEvents {
   'wheel:cancel': null;
   /** `tag` marks a ping from another room member. */
   'ping:spawn': Point & { id: PingId; tag?: PingTag };
+  'agent:ping': Point & { id: PingId; tag: PingTag; requestId: number };
   /** `owner` is 'self', 'preview' or a room member: each owner has at most one emote on screen. */
   'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag };
   'emote:clear': { owner: string };
@@ -37,7 +38,7 @@ export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
   'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'emote:spawn', 'emote:clear',
-  'toast:show',
+  'toast:show', 'agent:ping',
 ];
 
 /** overlay renderer → main: string[] of asset files that failed to load. */
@@ -46,6 +47,8 @@ export const OVERLAY_ASSETS = 'overlay:assets';
 export const OVERLAY_PINGED = 'overlay:pinged';
 /** overlay renderer → main: {ref, x, y} of an emote the wheel just placed, so it can be shared with the room. */
 export const OVERLAY_EMOTED = 'overlay:emoted';
+/** Completion means both the visual and audio have ended. */
+export const AGENT_PING_ENDED = 'overlay:agent-ping-ended';
 
 export interface AppStatus {
   enabled: boolean;

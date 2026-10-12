@@ -170,3 +170,31 @@ describe('OverlayManager remote and preview emotes', () => {
     expect(shared).not.toHaveBeenCalled();
   });
 });
+
+describe('Agent reply queue', () => {
+  const reply = (displayId: number, id: 'missing' | 'omw' = 'missing') => ({ displayId, id, x: 20, y: 30, tag: { name: 'AI', color: 4 } });
+  const loaded = (i: number) => (h.windows[i].webContents as unknown as { emit: (name: string) => void }).emit('did-finish-load');
+  const ended = (i: number, requestId: number) => h.handlers.get('overlay:agent-ping-ended')!({ sender: h.windows[i].webContents }, requestId);
+  it('serializes a burst across displays and ignores stale/wrong-display acknowledgements', () => {
+    loaded(0); loaded(1);
+    mgr.spawnAgent(reply(1)); mgr.spawnAgent(reply(2, 'omw')); mgr.spawnAgent(reply(1));
+    expect(sent(0)).toHaveLength(1); expect(sent(1)).toHaveLength(0);
+    const first = (sent(0)[0][1] as { requestId: number }).requestId;
+    ended(1, first); ended(0, first + 50);
+    expect(sent(1)).toHaveLength(0);
+    ended(0, first);
+    expect(sent(1)[0][0]).toBe('agent:ping');
+    ended(0, first); expect(sent(0)).toHaveLength(1);
+    ended(1, (sent(1)[0][1] as { requestId: number }).requestId);
+    expect(sent(0)).toHaveLength(2);
+  });
+  it('waits for renderer readiness and does not queue the user or preview pings', () => {
+    mgr.spawnAgent(reply(1)); expect(sent(0)).toHaveLength(0);
+    loaded(0); expect(sent(0)[0][0]).toBe('agent:ping');
+    mgr.previewPing('danger'); expect(sent(0)[1][0]).toBe('ping:spawn');
+  });
+  it('skips removed displays rather than stranding later replies', () => {
+    loaded(0); mgr.spawnAgent(reply(99)); mgr.spawnAgent(reply(1));
+    expect(sent(0)).toHaveLength(1);
+  });
+});

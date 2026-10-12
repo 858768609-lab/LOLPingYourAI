@@ -42,7 +42,7 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   };
   overlays.on('shared', p => enqueue(p.id, p.displayId, p.x, p.y));
   overlays.on('sharedEmote', p => {
-    const builtins: Record<string, string> = { unworthy: 'bait', unworthy_cn: 'bait', facepalm: 'bait', retreat: 'retreat', like: 'like', celebrate: 'celebrate' };
+    const builtins: Record<string, string> = { unworthy: 'bait', unworthy_cn: 'bait', facepalm: 'bait', poro_ride: 'retreat', super_approved: 'like', nice: 'like', gg_heart: 'celebrate', teamwork: 'celebrate' };
     const signal = service.config.mappings?.[p.ref] ? p.ref : builtins[p.ref] ?? 'reaction';
     enqueue(signal, p.displayId, p.x, p.y);
   });

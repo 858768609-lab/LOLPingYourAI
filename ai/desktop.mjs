@@ -69,7 +69,7 @@ export class Desktop {
   async reply({ signal, target, at, caption }) {
     const point = at === 'cursor' ? this.electron.screen.getCursorScreenPoint() : anchoredPoint(target, (await this.resolve(target)).bounds);
     const display = this.electron.screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) });
-    this.overlays.spawnRemote({ id: this.pingIds[signal] ?? 'generic', displayId: display.id, x: point.x - display.bounds.x, y: point.y - display.bounds.y, tag: { name: caption || 'AI', color: 4 } });
+    this.overlays.spawnAgent({ id: this.pingIds[signal] ?? 'generic', displayId: display.id, x: point.x - display.bounds.x, y: point.y - display.bounds.y, tag: { name: caption || 'AI', color: 4 } });
   }
   async action(args, context) {
     const target = await this.resolve(context.target), identity = { id: target.id, pid: target.pid };

@@ -27,9 +27,9 @@ export const ALL_PINGS: readonly PingDef[] = [
   { id: 'enemyvision', name: 'Enemy Vision', icon: 'enemy_vision', art: ['pingwheel_enemyvisionrender'], sound: 'AreaIsWarded', color: '#ff3b55' },
   { id: 'generic', name: 'Generic', icon: 'generic_ping', art: ['pingwheel_basicpingrender'], sound: 'Base', color: '#2e8bff' },
   { id: 'bait', name: 'Bait', icon: 'pingwheel_baitrender', art: ['pingwheel_baitrender'], sound: 'SRP_11', color: '#efbc12' },
-  { id: 'retreat', name: 'Retreat', icon: 'retreat', art: ['retreat'], sound: 'Base', color: '#fa7575' },
-  { id: 'like', name: 'Nice', icon: 'like', art: ['like'], sound: 'ComeHere', color: '#5ed9ba' },
-  { id: 'celebrate', name: 'Celebrate', icon: 'celebrate', art: ['celebrate'], sound: 'OnMyWay', color: '#e9c66b' },
+  { id: 'retreat', name: 'Retreat', icon: 'pingwheel_retreatrender', art: ['pingwheel_retreatrender'], sound: 'Base', color: '#fa7575' },
+  { id: 'like', name: 'Nice', icon: 'emote_super_approved', art: ['emote_super_approved'], sound: 'ComeHere', color: '#5ed9ba' },
+  { id: 'celebrate', name: 'Celebrate', icon: 'emote_gg_heart', art: ['emote_gg_heart'], sound: 'OnMyWay', color: '#e9c66b' },
   { id: 'visioncleared', name: 'Vision Cleared', icon: 'vision_cleared', art: ['pingwheel_visionclearedrender'], sound: 'SRP_6', color: '#2b80ff' },
 ];
 

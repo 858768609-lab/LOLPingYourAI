@@ -18,6 +18,7 @@ app.whenReady().then(async () => {
     await win.loadURL('lolping://app/overlay/index.html');
     const sounds = readdirSync('out/renderer/sounds').filter(f => f.endsWith('.wav'));
     const textures = readdirSync('out/renderer/textures').filter(f => f.endsWith('.png'));
+    const emotes = readdirSync('out/renderer/emotes').filter(f => /\.(png|webp|ogg)$/.test(f));
     const result = await win.webContents.executeJavaScript(`(async () => {
       const audio = new AudioContext();
       for (const file of ${JSON.stringify(sounds)}) {
@@ -30,7 +31,13 @@ app.whenReady().then(async () => {
         const image = new Image(); image.src = 'lolping://assets/textures/' + file;
         await image.decode(); if (!image.naturalWidth) throw new Error('Empty image: ' + file);
       }
-      await audio.close(); return { sounds: ${sounds.length}, textures: ${textures.length}, passed: true };
+      for (const file of ${JSON.stringify(emotes)}) {
+        const response = await fetch('lolping://app/emotes/' + file);
+        if (!response.ok) throw new Error(file + ': ' + response.status);
+        if (file.endsWith('.ogg')) await audio.decodeAudioData(await response.arrayBuffer());
+        else { const image = new Image(); image.src = 'lolping://app/emotes/' + file; await image.decode(); }
+      }
+      await audio.close(); return { sounds: ${sounds.length}, textures: ${textures.length}, emoteFiles: ${emotes.length}, passed: true };
     })()`);
     console.log(JSON.stringify(result)); app.exit(0);
   } catch (error) { console.error(error.message); app.exit(1); }

@@ -1,11 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { EmoteRef } from '../shared/emotes';
 import {
-  OVERLAY_ASSETS, OVERLAY_CHANNELS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents,
+  AGENT_PING_ENDED, OVERLAY_ASSETS, OVERLAY_CHANNELS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents,
 } from '../shared/ipc';
 import type { PingId } from '../shared/pings';
 
 const api = {
+  agentPingEnded(requestId: number): void { ipcRenderer.send(AGENT_PING_ENDED, requestId); },
   on<C extends OverlayChannel>(channel: C, cb: (payload: OverlayEvents[C]) => void): void {
     if (!OVERLAY_CHANNELS.includes(channel)) throw new Error(`unknown overlay channel: ${channel}`);
     ipcRenderer.on(channel, (_event, payload: OverlayEvents[C]) => cb(payload));

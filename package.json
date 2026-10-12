@@ -18,8 +18,7 @@
     "dist": "npm run build:helper && npm run build:desktop && electron-vite build && electron-builder --win --publish never",
     "dist:mac": "npm run build:helper && npm run build:desktop && electron-vite build && electron-builder --mac --arm64 --publish never",
     "test:ai": "node --test ai/test/*.test.mjs",
-    "build:desktop": "node native/desktop/build.mjs",
-    "assets": "node tools/original-assets.mjs"
+    "build:desktop": "node native/desktop/build.mjs"
   },
   "devDependencies": {
     "@fluentui/react-components": "9.74.9",

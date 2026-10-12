@@ -24,17 +24,24 @@ export class SoundBank {
     return results.filter((r): r is string => r !== null);
   }
 
-  play(key: string, volume01: number): void {
+  async play(key: string, volume01: number): Promise<void> {
     const buffer = this.buffers.get(key);
     if (!buffer || volume01 <= 0 || this.voices >= MAX_VOICES) return;
-    if (this.ctx.state !== 'running') void this.ctx.resume();
+    try { if (this.ctx.state !== 'running') await this.ctx.resume(); } catch { return; }
+    if (this.ctx.state !== 'running' || this.voices >= MAX_VOICES) return;
     const src = this.ctx.createBufferSource();
     const gain = this.ctx.createGain();
     src.buffer = buffer;
     gain.gain.value = volume01;
     src.connect(gain).connect(this.ctx.destination);
     this.voices++;
-    src.onended = () => this.voices--;
-    src.start();
+    await new Promise<void>(resolve => {
+      src.onended = () => {
+        this.voices--;
+        src.disconnect(); gain.disconnect();
+        setTimeout(resolve, Math.max(0, this.ctx.outputLatency ?? 0) * 1000);
+      };
+      try { src.start(); } catch { this.voices--; src.disconnect(); gain.disconnect(); resolve(); }
+    });
   }
 }

@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain, screen, type Display, type WebContents } from '
 import { EventEmitter } from 'node:events';
 import { isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
 import {
-  OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
+  AGENT_PING_ENDED, OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
 } from '../shared/ipc';
 import { isPingId, type PingId } from '../shared/pings';
 import type { HelperEvent, WheelKind } from '../shared/protocol';
@@ -41,6 +41,10 @@ export class OverlayManager extends EventEmitter {
   private numberedList: NumberedDisplay[] = [];
   private wheelDisplay: number | null = null;
   private wheelKind: WheelKind = 'ping';
+  private agentQueue: Array<SharedPing & { tag: PingTag; requestId: number }> = [];
+  private agentActive: (SharedPing & { tag: PingTag; requestId: number }) | null = null;
+  private agentSequence = 0;
+  private ready = new Set<number>();
 
   /** `resolveArt` says what an emote looks like: `remote` is true for a room member's, whose files may be missing here. */
   constructor(private settings: OverlaySettings, private readonly resolveArt: (ref: EmoteRef, remote: boolean) => EmoteArt) {
@@ -48,6 +52,11 @@ export class OverlayManager extends EventEmitter {
   }
 
   start(): void {
+    ipcMain.on(AGENT_PING_ENDED, (event, requestId: unknown) => {
+      if (!this.agentActive || requestId !== this.agentActive.requestId || this.displayOf(event.sender) !== this.agentActive.displayId) return;
+      this.agentActive = null;
+      this.pumpAgentQueue();
+    });
     ipcMain.on(OVERLAY_ASSETS, (_event, missing: unknown) => {
       if (!Array.isArray(missing)) return;
       for (const m of missing) if (typeof m === 'string') this.missingAssets.add(m);
@@ -129,6 +138,25 @@ export class OverlayManager extends EventEmitter {
     this.send(p.displayId, 'ping:spawn', { id: p.id, x: p.x, y: p.y, tag: p.tag });
   }
 
+  /** Agent replies enqueue immediately; one reply plays across all displays at a time. */
+  spawnAgent(p: SharedPing & { tag: PingTag }): void {
+    this.agentQueue.push({ ...p, requestId: ++this.agentSequence });
+    this.pumpAgentQueue();
+  }
+
+  private pumpAgentQueue(): void {
+    if (this.agentActive) return;
+    while (this.agentQueue.length) {
+      const next = this.agentQueue[0], win = this.windows.get(next.displayId);
+      if (!win || win.isDestroyed()) { this.agentQueue.shift(); continue; }
+      if (!this.ready.has(next.displayId)) return;
+      this.agentActive = this.agentQueue.shift()!;
+      const { displayId, ...payload } = this.agentActive;
+      this.send(displayId, 'agent:ping', payload);
+      return;
+    }
+  }
+
   /** Shows an emote in the middle of the main display, without sharing it (the settings page's preview). */
   previewEmote(ref: EmoteRef): void {
     const d = screen.getPrimaryDisplay();
@@ -162,6 +190,7 @@ export class OverlayManager extends EventEmitter {
   }
 
   destroy(): void {
+    this.agentQueue = []; this.agentActive = null; this.ready.clear();
     for (const w of this.windows.values()) if (!w.isDestroyed()) w.destroy();
     this.windows.clear();
   }
@@ -233,7 +262,19 @@ export class OverlayManager extends EventEmitter {
     win.setIgnoreMouseEvents(true);
     win.setAlwaysOnTop(true, 'screen-saver');
     if (IS_MAC) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
-    win.webContents.on('did-finish-load', () => win.webContents.send('overlay:settings', this.settings));
+    win.webContents.on('did-finish-load', () => {
+      win.webContents.send('overlay:settings', this.settings);
+      this.ready.add(d.id);
+      this.pumpAgentQueue();
+    });
+    win.on('closed', () => {
+      this.ready.delete(d.id);
+      this.agentQueue = this.agentQueue.filter(p => p.displayId !== d.id);
+      if (this.agentActive?.displayId === d.id) this.agentActive = null;
+      this.pumpAgentQueue();
+    });
+    // Destroying the renderer also ends its audio/visuals; do not strand the queue.
+    win.webContents.on('render-process-gone', () => { if (!win.isDestroyed()) win.destroy(); });
     win.once('ready-to-show', () => {
       win.showInactive();
       win.setBounds(d.bounds); // re-apply: mixed-DPI setups can size the first frame wrong

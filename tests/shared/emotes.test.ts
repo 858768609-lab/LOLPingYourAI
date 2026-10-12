@@ -37,7 +37,7 @@ describe('emote refs', () => {
   });
 
   it('looks up catalog entries', () => {
-    expect(catalogEmote('facepalm')?.leagueId).toBe(0);
+    expect(catalogEmote('facepalm')?.leagueId).toBe(4341);
     expect(catalogEmote('nope')).toBeUndefined();
   });
 
@@ -119,7 +119,7 @@ describe('normalizeClickEmote', () => {
     expect(normalizeClickEmote('not_in_catalog', [])).toBe(DEFAULT_CLICK_EMOTE);
     expect(normalizeClickEmote(7, [])).toBe(DEFAULT_CLICK_EMOTE);
     expect(normalizeClickEmote(undefined, [])).toBe(DEFAULT_CLICK_EMOTE);
-    expect(normalizeClickEmote('thinking', [])).toBe('thinking');
+    expect(normalizeClickEmote('gasp', [])).toBe('gasp');
   });
 
   it('keeps a known custom ref and drops an unknown one', () => {
@@ -135,7 +135,7 @@ describe('asset files', () => {
     expect(files).toHaveLength(EMOTE_CATALOG.length * 2 + sounds);
     expect(files).toContain('emotes/facepalm.webp');
     expect(files).toContain('emotes/facepalm.png');
-    expect(files).not.toContain('emotes/facepalm.ogg');
+    expect(files).toContain('emotes/facepalm.ogg');
     expect(new Set(files).size).toBe(files.length);
   });
 

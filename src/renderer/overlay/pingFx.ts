@@ -30,7 +30,7 @@ const div = (cls: string): HTMLDivElement => {
 };
 
 /** Adds one animated ping at (x, y) and removes it when its animation ends. */
-export function spawnPing(layer: HTMLElement, def: PingDef, x: number, y: number, opts: PingFxOptions): void {
+export function spawnPing(layer: HTMLElement, def: PingDef, x: number, y: number, opts: PingFxOptions): Promise<void> {
   const root = div('ping');
   root.style.left = `${x}px`;
   root.style.top = `${y}px`;
@@ -58,5 +58,5 @@ export function spawnPing(layer: HTMLElement, def: PingDef, x: number, y: number
   }
   while (layer.childElementCount >= MAX_PINGS) layer.firstElementChild?.remove();
   layer.append(root);
-  setTimeout(() => root.remove(), opts.durationS * 1000 + 150);
+  return new Promise(resolve => setTimeout(() => { root.remove(); resolve(); }, opts.durationS * 1000 + 150));
 }

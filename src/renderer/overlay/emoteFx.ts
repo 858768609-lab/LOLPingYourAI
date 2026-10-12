@@ -15,6 +15,7 @@ interface Live {
   /** The object URL of a bundled emote's image, once its Blob has arrived. */
   url: string | null;
   gone: boolean;
+  complete: () => void;
 }
 
 const div = (cls: string): HTMLDivElement => {
@@ -59,15 +60,17 @@ export class EmoteStage {
   constructor(private readonly layer: HTMLElement, private readonly fetchBlob: (url: string) => Promise<Blob> = fetchImage) {}
 
   /** Shows `art` centred on (x, y), replacing the owner's emote if it has one on screen. */
-  spawn(owner: string, art: EmoteArt, x: number, y: number, opts: EmoteOptions): void {
+  spawn(owner: string, art: EmoteArt, x: number, y: number, opts: EmoteOptions): Promise<void> {
     this.clear(owner);
     const root = div('emote');
     root.style.left = `${x}px`;
     root.style.top = `${y}px`;
     root.style.setProperty('--size', `${opts.sizePx}px`);
     root.style.setProperty('--dur', `${EMOTE_DURATION_S}s`);
+    let complete!: () => void;
+    const ended = new Promise<void>(resolve => { complete = resolve; });
     const live: Live = {
-      root, url: null, gone: false,
+      root, url: null, gone: false, complete,
       timer: setTimeout(() => this.end(owner, live), EMOTE_DURATION_S * 1000 + 150),
     };
     this.live.set(owner, live);
@@ -89,6 +92,7 @@ export class EmoteStage {
       root.append(tag);
     }
     this.layer.append(root);
+    return ended;
   }
 
   /** Removes the owner's emote at once, if it has one. */
@@ -143,5 +147,6 @@ export class EmoteStage {
     live.root.remove();
     if (live.url) URL.revokeObjectURL(live.url);
     if (this.live.get(owner) === live) this.live.delete(owner);
+    live.complete();
   }
 }

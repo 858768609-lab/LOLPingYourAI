@@ -41,7 +41,7 @@ Agent pings appear at the current target or pointer without moving the mouse and
 
 Import PNG/JPEG/GIF/WebP in **Emotes**. In **Create an emote**, crop an image to a square, preserve transparency or remove a flat background, and preview before adding it. A description plus optional reference image goes to the teammate: available image tools are preferred, otherwise it draws an original SVG. The preview labels the actual method. Imported emotes can have custom instructions and behaviors.
 
-Default icons and tones are original MIT assets. Optional local game packs are never bundled: choose a folder containing `textures/*.png` and `sounds/*.wav` in **Local asset pack**. Recognized names are listed in `src/shared/pings.ts`; the upstream lolPing `assets` folder uses that layout. Only recognized raster images and WAV files are imported into user data. Restart to refresh cached art/audio. **Restore originals** removes overrides. Third-party assets retain their original rights.
+The bundled ping textures, WAV sounds and 44 animated emotes with OGG sounds are the League of Legends assets included by upstream lolPing 0.5.1. The previous geometric artwork and synthesized tones have been removed. Local packs may still override recognized textures/sounds; **Restore LoL pack** removes those overrides. Game assets belong to Riot Games and are excluded from the code's MIT license.
 
 ## Develop
 
@@ -84,4 +84,6 @@ Runtime data lives under `~/Library/Application Support/LOLPingYourAI` on macOS 
 
 Question/ward contexts reject desktop mutations. Window identity is re-resolved before actions; moved windows require fresh coordinates. Old operations are revoked before interruption, and “stopped” means the adapter confirmed cancellation. Close/locked/ambiguous targets fail visibly. These controls cover the provided backend; arbitrary additional harness plugins are not an OS sandbox.
 
-MIT for code and original assets. Upstream copyright is retained; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).
+MIT for code; Riot Games retains rights to game artwork and audio. Upstream copyright is retained; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).
+
+Agent replies use one FIFO queue across displays. Each reply waits for both the previous visual removal and actual audio completion. Bursts enqueue immediately; user pings and previews remain immediate.

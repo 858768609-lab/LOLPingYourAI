@@ -64,14 +64,18 @@ function applySettings(s: OverlaySettings): void {
 }
 applySettings(settings);
 
-function ping(def: PingDef, x: number, y: number, tag?: PingTag): void {
-  spawnPing(pingLayer, def, x, y, { sizePx: settings.pingSizePx, durationS: settings.pingDurationS, tag });
-  sounds.play(def.sound, volume());
+async function ping(def: PingDef, x: number, y: number, tag?: PingTag): Promise<void> {
+  await Promise.all([
+    spawnPing(pingLayer, def, x, y, { sizePx: settings.pingSizePx, durationS: settings.pingDurationS, tag }),
+    sounds.play(def.sound, volume()),
+  ]);
 }
 
-function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag): void {
-  stage.spawn(owner, art, x, y, { sizePx: settings.emoteSizePx, tag });
-  if (art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound && settings.emoteSound) sounds.play(`emote:${art.slug}`, volume());
+async function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag): Promise<void> {
+  await Promise.all([
+    stage.spawn(owner, art, x, y, { sizePx: settings.emoteSizePx, tag }),
+    art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound && settings.emoteSound ? sounds.play(`emote:${art.slug}`, volume()) : Promise.resolve(),
+  ]);
 }
 
 const wheelOf = (p: { wheel?: WheelKind }): Wheel => (p.wheel === 'emote' ? emoteWheel : pingWheel);
@@ -96,6 +100,14 @@ window.overlay.on('wheel:cancel', () => {
   emoteWheel.cancel();
 });
 window.overlay.on('ping:spawn', (p) => ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag));
+window.overlay.on('agent:ping', async (p) => {
+  await assetsReady;
+  const reactions: Partial<Record<string, string>> = { bait: 'unworthy_cn', like: 'super_approved', celebrate: 'gg_heart' };
+  const slug = reactions[p.id];
+  if (slug) await emote('agent', { kind: 'bundled', slug }, p.x, p.y, p.tag);
+  else await ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag);
+  window.overlay.agentPingEnded(p.requestId);
+});
 window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
 window.overlay.on('emote:clear', (p) => stage.clear(p.owner));
 window.overlay.on('toast:show', (t) => showToast(toastLayer, t.title, t.body));
@@ -135,7 +147,7 @@ const soundEntries = [
 // About lists a missing file by its place in assets/ ("sounds/x.wav", "emotes/y.ogg"), not by the URL this page used.
 const assetName = (url: string): string => url.replace(/^(?:\.{1,2}\/)+/, '');
 
-void Promise.all([sounds.load(soundEntries), checkImages()]).then(([missingSounds, missingImages]) => {
+const assetsReady = Promise.all([sounds.load(soundEntries), checkImages()]).then(([missingSounds, missingImages]) => {
   const missing = [...missingSounds.map(assetName), ...missingImages];
   if (missing.length > 0) window.overlay.reportMissingAssets(missing);
 });
