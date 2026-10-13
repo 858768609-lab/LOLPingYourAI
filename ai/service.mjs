@@ -4,6 +4,10 @@ import { validateConfig, signalFor, signals } from './config.mjs';
 import { ActionGate } from './gate.mjs';
 import { Wards } from './wards.mjs';
 
+// Screenshot tool results arrive as base64 images; keep them out of the history the settings window polls.
+export const compact = value => typeof value === 'string' ? (value.length > 2000 && /^[A-Za-z0-9+/=\s]+$/.test(value.slice(0, 2000)) ? `[${value.length} characters of binary data omitted]` : value)
+  : Array.isArray(value) ? value.map(compact) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, compact(v)])) : value;
+
 export class Teammate extends EventEmitter {
   constructor({ store, desktop, adapters, now = Date.now }) {
     super(); Object.assign(this, { store, desktop, adapters, now });
@@ -14,8 +18,8 @@ export class Teammate extends EventEmitter {
         if (event.method === 'item/agentMessage/delta') {
           const last = this.history.at(-1);
           if (last?.event.method === event.method && last.event.params.itemId === event.params.itemId) last.event.params.delta += event.params.delta;
-          else this.history.push({ harness: name, time: this.now(), event });
-        } else this.history.push({ harness: name, time: this.now(), event });
+          else this.history.push({ harness: name, time: this.now(), event: compact(event) });
+        } else this.history.push({ harness: name, time: this.now(), event: compact(event) });
         this.history = this.history.slice(-150); this.emit('change');
       });
       adapter.on('completed', p => { this.outcomes?.set(`${name}:${p.threadId}`, p.turn.status); this.gate.pause(); this.emit('change'); if (p.turn.status === 'completed') void this.onDelivered(name).catch(e => this.notice(e.message)); });

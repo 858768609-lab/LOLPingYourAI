@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import { CodexAdapter } from '../harness/codex.mjs';
 
 test('newly created or already loaded Codex thread is not resumed again', async () => {
@@ -15,4 +16,23 @@ test('Codex interrupt stays pending until completion is confirmed', async () => 
   let finished = false; const cancel = a.cancel('s').then(() => { finished = true; });
   await new Promise(r => setImmediate(r)); assert.equal(finished, false);
   a.emit('completed', { threadId: 's', turn: { id: 't', status: 'interrupted' } }); await cancel; assert.equal(finished, true);
+});
+
+const fakeServer = () => new CodexAdapter({ command: process.execPath, cwd: fileURLToPath(new URL('./fixtures/', import.meta.url)), mcp: { command: 'unused', args: [], env: {} }, skillPath: '/skill' });
+
+test('concurrent Codex callers share one initialization before sending requests', async () => {
+  const a = fakeServer();
+  try { const [, thread] = await Promise.all([a.connect(), a.create()]); assert.equal(thread, 'thread-1'); }
+  finally { a.close(); }
+});
+
+test('Codex app-server exit fails active turns instead of leaving waiters hanging', async () => {
+  const a = fakeServer(); const failures = []; a.on('failure', error => failures.push(error.message));
+  const completed = new Promise(resolve => a.on('completed', resolve));
+  const thread = await a.create(); await a.send(thread, 'crash now');
+  const done = await completed;
+  assert.deepEqual([done.threadId, done.turn.status], ['thread-1', 'failed']); assert.equal(a.active.size, 0); assert.match(failures.at(-1), /exited/);
+  await assert.doesNotReject(a.cancel(thread)); // Nothing left to interrupt.
+  assert.equal(await a.create(), 'thread-1'); // Reconnects with a fresh app-server.
+  a.close();
 });

@@ -14,12 +14,13 @@ export function TeammatePanel() {
   const [reference, setReference] = useState<string>();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const refresh = async () => { try { setState(await call('status')); setCandidates(await call('candidates')); } catch (e) { setError(String(e)); } };
+  useEffect(() => { void call('doctor').then(setPermissions).catch(() => {}); }, []);
   useEffect(() => { void refresh(); const unsubscribe = window.teammateApi.onChange(() => { void refresh(); }); const timer = setInterval(() => { void refresh(); }, 3000); return () => { unsubscribe(); clearInterval(timer); }; }, []);
   useEffect(() => { if (!state) return; const mapping = state.config.mappings?.[signal] ?? state.signals[signal]; if (mapping) { setPrompt(mapping.prompt); setMode(mapping.mode); } }, [signal, Boolean(state), JSON.stringify(state?.config.mappings)]);
   const run = async (fn: () => Promise<unknown>, message = 'Saved / 已保存') => { setError(''); try { await fn(); setNotice(message); await refresh(); } catch (e) { setError(String(e)); } };
   if (!state) return <section id="teammate">Loading teammate…</section>;
   const cfg = state.config;
-  const messages = state.history.filter((h: any) => ['item/agentMessage/delta', 'claude/message'].includes(h.event.method)).map((h: any) => h.event.params?.delta ?? h.event.params?.message?.content?.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('') ?? '').join('\n\n').slice(-12000);
+  const messages = state.history.filter((h: any) => h.event.method === 'item/agentMessage/delta' || (h.event.method === 'claude/message' && h.event.params?.type === 'assistant')).map((h: any) => h.event.params?.delta ?? h.event.params?.message?.content?.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('') ?? '').filter(Boolean).join('\n\n').slice(-12000);
   return <section id="teammate" className="ai-panel">
     <div className="section">AI Teammate / 你的队友</div>
     <div className="ai-card">
