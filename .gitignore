@@ -13,3 +13,7 @@ native/desktop/build/
 .local/
 *.dmg
 *.exe
+
+# promo video (Remotion): synced Riot assets and renders stay out of git
+promo/public/
+promo/out/
