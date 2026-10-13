@@ -62,7 +62,7 @@ Environment: Apple Silicon, macOS 26.4, Electron 44.5.1, Codex CLI 0.162.0-alpha
 - Application-specific reading-mode/zoom optimization depends on the agent and target app; maximize/restore is the part verified here.
 - Builds use ad-hoc signing and are not notarized. Replacing a build can invalidate macOS grants; there is no available Developer ID identity on this machine.
 
-No GitHub repository was created or pushed. The original verification above describes the first build. The later LoL asset/queue revision is recorded below. Personal runtime data remains excluded.
+At the time of the first local verification, no GitHub repository had been created or pushed. The original verification above describes that first build. The later LoL asset/queue revision is recorded below. Personal runtime data remains excluded.
 
 
 ## LoL assets and serialized agent replies — later revision, 2026-10-12
@@ -75,3 +75,13 @@ No GitHub repository was created or pushed. The original verification above desc
 - Real Electron five-reply test exercised the actual OverlayManager, preload, overlay and Web Audio. Maximum concurrent visuals: 1. With a deliberately short 100 ms icon duration, the 980.77 ms sound still governed progression; observed start gaps were about 1009, 1009, 1011 and 3149 ms, with the last gap waiting for the animated emote to disappear. This tests both audio-longer and visual-longer cases.
 - Rebuilt and installed the Mac DMG. Both desktop permissions were confirmed true in the installed application. No Windows execution or subjective sound-quality assessment is claimed.
 - The installed app received real wheel pings after the update. These superseded the optional model-driven diagnostic; the five-item timing evidence above comes from the independent real Electron playback test, not that interrupted model turn.
+
+## Public release preparation — 2026-10-13
+
+- Bundled the updated skill that uses existing harness history/session search, project files and memory to recover unclear intent. No separate retrieval service was added. Claude's current programmatic tool policy still limits it to project MCP; the README states this limitation.
+- Updated English and Chinese installation/feature documentation, including platform status, permissions, source builds and release downloads.
+- Re-ran TypeScript checking, 709 Vitest cases (1 skipped), and 22 AI bridge tests successfully. The test runner emitted EventEmitter listener-count warnings; no tests failed.
+- Built and installed the Apple Silicon package. The source, packaged, installed and runtime skill files have identical SHA-256 hashes. The installed helper reports Accessibility and Screen Recording enabled.
+- The application passed strict deep code-signature verification; the DMG passed disk-image verification. SHA-256 is supplied alongside the release download.
+- Scanned tracked history for personal workstation paths and common credential patterns with no matches. Runtime captures, credentials, session records and build output remain excluded from Git.
+- Earlier live desktop evidence above remains the relevant behavioral test record; this documentation/skill packaging update did not repeat a full model-driven editing scenario.

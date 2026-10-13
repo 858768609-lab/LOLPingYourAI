@@ -6,24 +6,48 @@
 
 [English](README.md) · [实测记录](docs/verification.md) · [实现与接口](docs/architecture.md) · [来源与许可](THIRD_PARTY_NOTICES.md)
 
+## 能做什么
+
+- 在论文关键词、看不懂的界面或待处理的窗口旁 ping，让 AI 获取该区域和窗口上下文。
+- 用已有 Codex／Claude harness 接收指令、理解任务和执行工作；不另造规划器或历史搜索服务。
+- 意图不清时，skill 引导 agent 利用已有能力检索相关 session、项目文件和 memory，再决定继续或反问。
+- 让队友反 ping、纠正当前操作，或插眼并在 30 分钟后回看一次。
+- 自定义轮盘、信号内容和表情；agent 多条反 ping 排队播放，前一条图标和音效都结束才显示下一条。
+
+| 组合 | 状态 |
+| --- | --- |
+| macOS Apple Silicon＋Codex | 已实测桌面闭环，提供 DMG |
+| macOS＋Claude | 实验性 SDK 适配器，尚未登录实测 |
+| Windows＋Codex／Claude | 提供适配器和构建脚本，尚未在本机 Windows 验证 |
+
 ## 安装与使用
 
-Apple Silicon 安装包位于 `release/LOLPingYourAI-0.1.0-arm64.dmg`。将 LOLPingYourAI.app 放入「应用程序」。原版和派生版分别安装，同时只运行一个，以免全局输入冲突。
+在 [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.0) 下载 **LOLPingYourAI-0.1.0-arm64.dmg** 并打开。将 LOLPingYourAI.app 放入「应用程序」。原版和派生版分别安装，同时只运行一个，以免全局输入冲突。
 
-1. 准备已登录的 Codex CLI，或使用 Codex 桌面应用附带的 CLI；自定义位置可用环境变量 `LOLPINGAI_CODEX`。
+1. 按[官方指南](https://developers.openai.com/codex/cli/)安装 Codex CLI，并执行 `codex login` 登录，或使用 Codex 桌面应用附带的 CLI；自定义位置可用环境变量 `LOLPINGAI_CODEX`。
 2. 为 **LOLPingYourAI** 开启 macOS「隐私与安全性 → 辅助功能」及「录屏与系统录音」权限。不在列表时点 **＋** 添加应用，授权后重启。
 3. 在设置的 **AI Teammate / 队友** 中，可以一次性填写任务目标、进度和下一步。以后 ping 续接这个队友。
 4. **Option＋左键拖动**打开信号轮盘，**Control＋左键拖动**打开表情轮盘，松开发送。触发键、槽位和中心信号均可调整。
 5. **撤退**或 **Control＋Option＋Escape** 停止。Windows 对应 **Ctrl＋Alt＋Escape**。
 
-这是本地开发版，使用临时签名，未公证；没有开发者签名证书时，重新打包可能使 macOS 的旧授权失效，需要移除后重新添加。应用没有连接上游自动更新通道，不会被原版覆盖。
+skill 已内置并自动加载，无需单独安装。队友文本、工具审批、权限和插眼记录显示在设置中。
+
+这是开发 demo，使用临时签名，未公证；没有开发者签名证书时，重新打包可能使 macOS 的旧授权失效，需要移除后重新添加。应用没有连接上游自动更新通道，不会被原版覆盖。
+
+下载后若被 macOS 拦截，尝试打开一次，再到「系统设置 → 隐私与安全性」选择「仍要打开」。Release 附带 `SHA256SUMS` 供校验。若找不到 Codex，先退出本应用，再从终端指定 CLI 路径启动：
+
+```sh
+LOLPINGAI_CODEX="$(command -v codex)" /Applications/LOLPingYourAI.app/Contents/MacOS/LOLPingYourAI
+```
+
+模型服务可能产生账号用量或 API 费用；本应用不提供账号或密钥。
 
 ## 约定
 
 | 信号 | 默认行为 |
 | --- | --- |
 | 问号 | 解释或诊断截图区域；只读 |
-| 求助旗帜 | 检查进度并协助；意图不清时反问号 |
+| 求助旗帜 | 检查进度并协助；先检索相关上下文，仍不清楚时反问号 |
 | 警告 | 先中断旧动作，再看最新截图和纠错指令 |
 | 正在路上 | 铺满目标窗口，使用可恢复的阅读设置 |
 | 插眼 | **30 分钟后回看一次**，只观察并汇报 |
@@ -37,6 +61,8 @@ Apple Silicon 安装包位于 `release/LOLPingYourAI-0.1.0-arm64.dmg`。将 LOLP
 
 区域是关注点，执行时可操作所属窗口的其他控件。窗口移动后重新截图定位。屏幕边缘保留正方形留白。定时回访和 agent 反 ping 不刷新用户活跃时间；超时先安全停止，携带简短交接创建新会话。绑定外部聊天采用明确的任务交接，不声称控制原聊天。
 
+Agent 反 ping 使用跨屏统一的先进先出队列：等上一条图标消失且音效实际播放结束后，才展示下一条。可以连续发送多条；用户手动 ping 和预览仍即时响应。
+
 反 ping 可显示在任务区域或当前鼠标旁，无需移动鼠标，也不会再次唤醒 agent。问号表示不明白，正在路上表示收到，交战表示开工，插眼表示登记成功。轻度调侃可关闭，完成时最多回敬一次。
 
 ## 表情与素材
@@ -48,6 +74,13 @@ Apple Silicon 安装包位于 `release/LOLPingYourAI-0.1.0-arm64.dmg`。将 LOLP
 - 默认使用上游 lolPing 0.5.1 收录的 LoL 原生信号、音效及 44 个动态表情（含原音效）。此前的原创几何图标和合成音效已删除。本地素材包仍可覆盖默认素材，点击「恢复 LoL 素材」可清除覆盖。游戏素材属于 Riot Games，不适用代码的 MIT 许可。
 
 ## 开发与命令
+
+先获取源码：
+
+```sh
+git clone https://github.com/ChristianYang37/LOLPingYourAI.git
+cd LOLPingYourAI
+```
 
 需要 Node 22+、pnpm 10；Mac 需要 Xcode 命令行工具，Windows 需要 Visual Studio C++ 构建工具及 .NET Framework C# 编译器。
 
@@ -64,7 +97,7 @@ pnpm typecheck
 pnpm test:helper
 pnpm test
 pnpm dist:mac
-pnpm exec electron tools/check-assets.cjs
+pnpm exec electron tools/check-assets.cjs # 先执行 pnpm build
 pnpm exec electron tools/check-agent-queue.cjs
 # Windows 上执行：pnpm dist
 ```
@@ -84,8 +117,12 @@ node ai/cli.mjs stop
 
 Mac 数据目录是 `~/Library/Application Support/LOLPingYourAI`，Windows 是 `%APPDATA%/LOLPingYourAI`。配置、会话、回访、最近 100 张截图与本地素材保存在这里。截图和指令会发给你选择的 harness／模型服务，使用已有账号。
 
+## Harness 与能力边界
+
+应用负责把 ping 变成结构化事件，加载 skill 并提供桌面工具；理解、检索和执行交给已有 harness。连续 ping 续接固定队友会话，「绑定任务」明确交接目标和进度，不会暗中接管其他聊天。
+
+意图不清时优先检索相关历史 session、文件和 memory，但可读范围取决于当前 harness 的工具和权限。本版 Claude 程序化适配器仅允许项目 MCP 工具，尚未开放原生历史／文件工具；不能承诺任意已有聊天或 memory 都能访问。
+
 Codex 用 App Server；Claude 用 Agent SDK＋项目 MCP。检测到原生 Codex Computer Use 时，本 demo 仍使用项目后端，以统一坐标和取消锁；原生后端接入还未完成。Claude 的 macOS 交互式原生 Computer Use 不能当作 Windows／程序化会话的通用实现。SDK 已安装并不代表已登录。
 
-[实测记录](docs/verification.md) 分别列出真实闭环、自动测试与尚未验证的组合。源码使用 MIT，游戏素材保留 Riot Games 权利，保留上游作者署名。本次仅本地交付，没有创建或推送 GitHub 仓库。
-
-Agent 反 ping 使用跨屏统一的先进先出队列：等上一条图标消失且音效实际播放结束后，才展示下一条。可以连续发送多条；用户手动 ping 和预览仍即时响应。
+[实测记录](docs/verification.md) 分别列出真实闭环、自动测试与尚未验证的组合。源码使用 MIT，游戏素材保留 Riot Games 权利，保留上游作者署名。源码仓库：[ChristianYang37/LOLPingYourAI](https://github.com/ChristianYang37/LOLPingYourAI)。
