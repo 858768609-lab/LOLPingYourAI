@@ -28,7 +28,7 @@ export async function startTeammate(overlays: OverlayManager, library: EmoteLibr
   await copyFile(join(root, 'skills/lolping-your-ai/SKILL.md'), join(skillDir, 'SKILL.md'));
   const adapters = {
     codex: new CodexAdapter({ command: process.env.LOLPINGAI_CODEX ?? process.env.CODEX_CLI_PATH ?? (existsSync(bundledCodex) ? bundledCodex : 'codex'), cwd: settingsDir(), mcp, skillPath: join(skillDir, 'SKILL.md') }),
-    claude: new ClaudeAdapter({ cwd: settingsDir(), mcp, skillPath: join(skillDir, 'SKILL.md') }),
+    claude: new ClaudeAdapter({ cwd: settingsDir(), mcp, skillPath: join(skillDir, 'SKILL.md'), executable: process.env.LOLPINGAI_CLAUDE }),
   };
   const service = new Teammate({ store, desktop, adapters }); await service.init();
   const icons = new IconCandidates(join(settingsDir(), 'icon-candidates'));

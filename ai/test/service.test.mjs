@@ -87,3 +87,12 @@ test('switching harness keeps separate sessions and cancels former desktop work'
   await service.configure({ harness: 'claude' }); await service.dispatch({ signal: 'missing' });
   assert.ok(service.sessions.codex); assert.ok(service.sessions.claude); assert.equal(adapter.active.size, 0); assert.deepEqual(adapter.cancelled, [first.session]);
 });
+
+test('teammate history keeps text but drops screenshot payloads', async () => {
+  const { service, adapter } = await fixture(), image = 'iVBORw0KGgo' + 'A'.repeat(300000);
+  adapter.emit('event', { method: 'claude/message', params: { type: 'user', message: { content: [{ type: 'tool_result', content: [{ type: 'image', source: { data: image } }, { type: 'text', text: 'Mapped region.' }] }] } } });
+  adapter.emit('event', { method: 'item/agentMessage/delta', params: { itemId: 'a', delta: 'Done. ' } }); adapter.emit('event', { method: 'item/agentMessage/delta', params: { itemId: 'a', delta: 'Note restored.' } });
+  const [tool, reply] = service.status().history.map(h => h.event.params);
+  assert.match(tool.message.content[0].content[0].source.data, /^\[300011 characters of binary data omitted\]$/); assert.equal(tool.message.content[0].content[1].text, 'Mapped region.');
+  assert.equal(reply.delta, 'Done. Note restored.'); assert.ok(JSON.stringify(service.status().history).length < 2000);
+});

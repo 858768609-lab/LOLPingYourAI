@@ -1,0 +1,30 @@
+{
+  "name": "lolpingyourai-promo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Remotion source for the LOLPingYourAI promo video, README GIF and social images.",
+  "type": "module",
+  "scripts": {
+    "sync-assets": "node scripts/sync-assets.mjs",
+    "prestart": "node scripts/sync-assets.mjs",
+    "start": "remotion studio src/index.ts",
+    "prerender": "node scripts/sync-assets.mjs",
+    "render": "node scripts/render-all.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.529",
+    "@remotion/cli": "4.0.529",
+    "@remotion/google-fonts": "4.0.529",
+    "@remotion/renderer": "4.0.529",
+    "@remotion/transitions": "4.0.529",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "typescript": "5.9.3"
+  }
+}

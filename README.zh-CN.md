@@ -1,110 +1,140 @@
+<div align="center">
+
+<img src="build/icon.png" width="104" alt="LOLPingYourAI 图标">
+
 # LOLPingYourAI
 
-把桌面上的一声 ping，变成给 AI 队友的指令。
+**在桌面任何地方 ping 一下，AI 队友立刻拿到上下文。**
 
-基于 [darrenprx/lolPing](https://github.com/darrenprx/lolPing) 0.5.1 派生，保留按键—拖动—松开的双轮盘、透明覆盖层和图片导入；加入区域截图、Codex／Claude 会话、反 ping、纠错中断和持久化插眼回访。
+按住 <kbd>⌥ Option</kbd> 拖动，松开选中信号。像在峡谷里打信号一样，把你指着的地方、它所在的窗口和这个信号的意思一起发给 Codex 或 Claude 队友。它会反 ping 你、解释、动手操作那个窗口；你喊一声 **危险**，它马上停下。
 
-[English](README.md) · [实测记录](docs/verification.md) · [实现与接口](docs/architecture.md) · [来源与许可](THIRD_PARTY_NOTICES.md)
+<a href="https://github.com/ChristianYang37/LOLPingYourAI/releases/latest"><img src="https://img.shields.io/github/v/release/ChristianYang37/LOLPingYourAI?label=release&color=c8aa6e&labelColor=0a1428" alt="最新版本"></a>
+<a href="https://github.com/ChristianYang37/LOLPingYourAI/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ChristianYang37/LOLPingYourAI/ci.yml?branch=main&label=CI&labelColor=0a1428" alt="CI"></a>
+<img src="https://img.shields.io/badge/macOS-Apple%20Silicon-c8aa6e?labelColor=0a1428&logo=apple&logoColor=white" alt="macOS Apple Silicon">
+<img src="https://img.shields.io/badge/teammate-Codex%20%C2%B7%20Claude-0ac8b9?labelColor=0a1428" alt="Codex 与 Claude">
+<a href="LICENSE"><img src="https://img.shields.io/badge/code-MIT-1fa9e0?labelColor=0a1428" alt="代码采用 MIT 许可"></a>
 
-## 能做什么
+[English](README.md) · **简体中文** · [下载](https://github.com/ChristianYang37/LOLPingYourAI/releases/latest) · [▶ 演示视频](docs/media/promo-zh.mp4) · [实现与接口](docs/architecture.md) · [实测记录](docs/verification.md)
 
-- 在论文关键词、看不懂的界面或待处理的窗口旁 ping，让 AI 获取该区域和窗口上下文。
-- 用已有 Codex／Claude harness 接收指令、理解任务和执行工作；不另造规划器或历史搜索服务。
-- 意图不清时，skill 引导 agent 利用已有能力检索相关 session、项目文件和 memory，再决定继续或反问。
-- 让队友反 ping、纠正当前操作，或插眼并在 30 分钟后回看一次。
-- 自定义轮盘、信号内容和表情；agent 多条反 ping 排队播放，前一条图标和音效都结束才显示下一条。
+<br>
+
+<img src="docs/media/hero.gif" width="880" alt="按住 Option 拖动，在论文上打开英雄联盟信号轮盘；问号信号把高亮区域发给 AI 队友，队友反 ping 并解释，随后收到求助信号，在练习窗口里输入文字">
+
+<sub>🔊 带音效的完整演示（47 秒）：<a href="docs/media/promo-zh.mp4">中文</a> · <a href="docs/media/promo-en.mp4">English</a></sub>
+
+</div>
+
+## 为什么做这个
+
+打字描述“右边 PDF 第二个公式，为什么要除以 √d？”，往往比问题本身还费劲。在峡谷里，你只会打一个信号。LOLPingYourAI 把这件事搬到桌面上，一个手势同时交给 AI 队友三样东西：
+
+- **哪里**：鼠标周围 512×512 的正方形区域，并能换算回真实的屏幕坐标。
+- **什么**：区域所在的窗口，包括应用、标题、位置和稳定的窗口 ID。
+- **想干嘛**：信号对应的指令，例如*解释一下*、*帮我做完*、*停下*、*30 分钟后再来看看*。
+
+队友就是你已经在用的 Codex 或 Claude harness，沿用它自己的模型、账号、工具和记忆。LOLPingYourAI 不另造规划器，也不另做历史检索服务，只负责 ping、内置的 skill 和一组范围很窄的桌面工具。
+
+<table>
+<tr>
+<td width="33%" valign="top"><img src="assets/textures/enemy_missing.png" width="36" alt=""><br><b>指一下，不用描述</b><br>截图、窗口和意图以结构化数据送达，不会被敲进恰好处于焦点的终端里。</td>
+<td width="33%" valign="top"><img src="assets/textures/assist_me.png" width="36" alt=""><br><b>先自己弄懂你的意思</b><br>信号含糊时，skill 会先检索相关会话、项目文件和记忆；仍不清楚才问你一个具体问题。</td>
+<td width="33%" valign="top"><img src="assets/textures/pingwheel_retreatrender.png" width="36" alt=""><br><b>随时喊停</b><br>危险和撤退会立即作废桌面操作；只有 harness 真正确认取消后，界面才会显示“已停止”。</td>
+</tr>
+<tr>
+<td valign="top"><img src="assets/textures/omw.png" width="36" alt=""><br><b>会反 ping 你</b><br>回复以屏幕上的反向信号出现，比如<i>正在路上</i>、<i>交战</i>、<i>？</i>。多条回复跨屏幕依次播放，不会挪动你的鼠标。</td>
+<td valign="top"><img src="assets/textures/need_vision.png" width="36" alt=""><br><b>插眼会回来看</b><br>给窗口插个眼，队友 30 分钟后回来看一次。重启、睡眠后依然有效，也绝不会重复执行。</td>
+<td valign="top"><img src="assets/textures/emote_super_approved.png" width="36" alt=""><br><b>轮盘和表情随你改</b><br>可以重排槽位、改信号内容，导入或裁切表情，也能让队友画一个。发个<i>弱爆</i>，它可能还会回嘴。</td>
+</tr>
+</table>
+
+## 信号
+
+| | 信号 | 队友会… |
+|:-:|---|---|
+| <img src="assets/textures/enemy_missing.png" width="30" alt=""> | **问号** | 解释这个区域；只看不改。 |
+| <img src="assets/textures/assist_me.png" width="30" alt=""> | **求助** | 检查进度并帮你做完；先检索上下文，意图仍不明确时再问。 |
+| <img src="assets/textures/pingwheel_retreatrender.png" width="30" alt=""> | **危险** | 立即中断，看最新截图和你的纠正，再重新判断。 |
+| <img src="assets/textures/omw.png" width="30" alt=""> | **正在路上** | 铺满目标窗口，用可恢复的方式改善阅读。 |
+| <img src="assets/textures/need_vision.png" width="30" alt=""> | **插眼** | **30 分钟后**回来看一次，只观察、只汇报。 |
+| <img src="assets/textures/all_in.png" width="30" alt=""> | **交战** | 把工作重点转到这里。 |
+| <img src="assets/textures/pingwheel_baitrender.png" width="30" alt=""> | **弱爆** | 收到你的“吐槽”，可以轻松回敬一句；不会自动撤销任何工作。 |
+| <img src="assets/textures/retreat_cb_128x128.png" width="30" alt=""> | **撤退** | 停下并交还控制权。 |
+| <img src="assets/textures/emote_super_approved.png" width="30" alt=""> <img src="assets/textures/emote_gg_heart.png" width="30" alt=""> | **点赞／喝彩** | 继续当前方向，或为完成的任务庆祝。 |
+| <img src="assets/textures/vision_cleared.png" width="30" alt=""> | **排眼** | 取消这个窗口待执行的回访。 |
+
+保留原版八格轮盘布局；**推进**、**注意这里**、**看这里**等额外信号可在槽位选择器中找到。每个信号的内容和行为（观察、执行、纠错、停止、插眼、情绪）都能在设置的 **AI Teammate / 你的队友** 中修改，skill 每次 ping 都读取最新配置。
+
+## 工作原理
+
+```mermaid
+sequenceDiagram
+  actor You as 你
+  participant App as LOLPingYourAI
+  participant AI as Codex / Claude
+  You->>App: ⌥ 拖动，在「？」上松开
+  Note over App: 截取 512×512 区域<br/>和窗口身份
+  App->>AI: 信号含义 + 截图 + 上下文
+  AI->>App: MCP get_context、screenshot
+  AI->>App: MCP reply_ping「正在路上」
+  App-->>You: 屏幕上的反 ping + 回答
+  You->>App: 对未完成的工作发求助
+  AI->>App: MCP desktop_action（仅限该窗口）
+  You->>App: 危险！
+  App->>AI: 作废操作，中断当前回合
+  AI-->>App: 确认已取消
+```
+
+沿用 lolPing 的原生输入助手，负责按下、拖动、松开和取消。确认后的 ping 会截图，并交给一个**持续存在的队友会话**：多次 ping 共用同一线程，闲置 2 小时后带着简短交接安全换新。agent 通过本地 MCP 服务工作，可用工具有 `get_context`、`screenshot`、`desktop_action`、`reply_ping`、`save_handoff`、`ward` 和 `submit_icon`。所有桌面操作经同一个闸门串行执行，一次纠正会让此前的旧操作全部失效。详见 [docs/architecture.md](docs/architecture.md)。
+
+## 快速开始（macOS）
+
+1. **安装**：在 [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.0) 下载 **LOLPingYourAI-0.1.0-arm64.dmg**，把应用拖进「应用程序」。请先退出原版 lolPing，同一时间只应运行一个全局输入助手。
+2. **连接队友**：安装 [Codex CLI](https://developers.openai.com/codex/cli/) 并执行 `codex login`；Codex 桌面应用自带的 CLI 会被自动找到。Claude 目前为实验性支持（见[平台状态](#平台状态)）。
+3. **授权**：打开应用，在「系统设置 → 隐私与安全性」中为 LOLPingYourAI 开启**辅助功能**和**录屏与系统录音**，然后重启应用。设置里的 **AI Teammate / 你的队友** 会显示两项检查结果。
+4. **开始 ping**：鼠标停在任意内容上，按住 <kbd>⌥ Option</kbd> + 左键拖动，在 **？** 上松开。<kbd>⌃ Control</kbd> + 拖动打开表情轮盘。
+5. **收回控制**：选**撤退**，或按 <kbd>⌃ Control</kbd> <kbd>⌥ Option</kbd> <kbd>Esc</kbd>（Windows 为 <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>Esc</kbd>）。
+
+可选：在 **AI Teammate → Task handoff / 绑定任务** 中一次性填写「目标／进度／下一步」，之后的 ping 都会接着它往下做。
+
+<details>
+<summary><b>常见问题</b></summary>
+
+- **提示“无法验证开发者”**：这是临时签名、未公证的 demo。先尝试打开一次，再到「系统设置 → 隐私与安全性」点「仍要打开」。如果提示应用“已损坏”，执行 `xattr -dr com.apple.quarantine /Applications/LOLPingYourAI.app`。
+- **权限列表里找不到应用**：点 **＋** 手动添加。重新打包或更新后，旧授权可能失效，需要先 **－** 移除再重新添加。
+- **找不到 Codex**：退出应用，从终端指定 CLI 路径启动：
+  ```sh
+  LOLPINGAI_CODEX="$(command -v codex)" /Applications/LOLPingYourAI.app/Contents/MacOS/LOLPingYourAI
+  ```
+  `LOLPINGAI_CLAUDE` 可以用同样方式指定 Claude Code 可执行文件。
+- **审批**：harness 的工具审批、提问和权限请求都会显示在 **AI Teammate** 中，不会被悄悄同意。
+- **费用**：模型服务可能产生用量费用；本应用不提供账号或 API key。Release 附带 `SHA256SUMS` 供校验。
+
+</details>
+
+## 平台状态
 
 | 组合 | 状态 |
 | --- | --- |
-| macOS Apple Silicon＋Codex | 已实测桌面闭环，提供 DMG |
-| macOS＋Claude | 实验性 SDK 适配器，尚未登录实测 |
-| Windows＋Codex／Claude | 提供适配器和构建脚本，尚未在本机 Windows 验证 |
+| macOS Apple Silicon＋**Codex** | ✅ 已用真实模型跑通桌面闭环（解释、编辑、中断、恢复、最大化、插眼），提供 DMG |
+| macOS＋**Claude** | 🧪 实验性 Agent SDK 适配器，带只读上下文工具；已有测试覆盖，尚未用已登录账号实测 |
+| Windows＋Codex／Claude | 🛠️ 已包含适配器、Win32 助手和安装脚本；尚未在 Windows 实机验证 |
 
-## 安装与使用
+哪些真正测过、哪些没有，都记录在 [docs/verification.md](docs/verification.md)。
 
-在 [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.0) 下载 **LOLPingYourAI-0.1.0-arm64.dmg** 并打开。将 LOLPingYourAI.app 放入「应用程序」。原版和派生版分别安装，同时只运行一个，以免全局输入冲突。
+## 安全与隐私
 
-1. 按[官方指南](https://developers.openai.com/codex/cli/)安装 Codex CLI，并执行 `codex login` 登录，或使用 Codex 桌面应用附带的 CLI；自定义位置可用环境变量 `LOLPINGAI_CODEX`。
-2. 为 **LOLPingYourAI** 开启 macOS「隐私与安全性 → 辅助功能」及「录屏与系统录音」权限。不在列表时点 **＋** 添加应用，授权后重启。
-3. 在设置的 **AI Teammate / 队友** 中，可以一次性填写任务目标、进度和下一步。以后 ping 续接这个队友。
-4. **Option＋左键拖动**打开信号轮盘，**Control＋左键拖动**打开表情轮盘，松开发送。触发键、槽位和中心信号均可调整。
-5. **撤退**或 **Control＋Option＋Escape** 停止。Windows 对应 **Ctrl＋Alt＋Escape**。
+- **只在本机**：MCP 服务通过回环地址和每次启动随机生成的令牌与应用通信，拒绝来自浏览器页面的请求。截图、会话、插眼和令牌保存在 `~/Library/Application Support/LOLPingYourAI`（Windows 为 `%APPDATA%/LOLPingYourAI`），不会进入 Git。
+- **操作有边界**：问号和插眼回访不能点击或输入；每次操作前重新确认窗口身份，窗口移动后旧坐标作废；目标关闭、锁屏或无法确定时明确报错。
+- **数据只发给你选的服务**：截图区域和指令只会以你现有的账号发送给你选择的 harness 和模型。
+- **Claude 的工具**：只开放只读的 `Read`、`Grep`、`Glob` 和桌面工具。工具调用前的钩子会拒绝凭据目录、密钥文件、对整个用户目录的检索以及其他所有工具，即使你的全局 Claude 设置允许它们。
+- **不是沙箱**：这些限制保护的是本项目自带的后端；你另外给 harness 装的插件不在范围内。
 
-skill 已内置并自动加载，无需单独安装。队友文本、工具审批、权限和插眼记录显示在设置中。
+## 配置与命令行
 
-这是开发 demo，使用临时签名，未公证；没有开发者签名证书时，重新打包可能使 macOS 的旧授权失效，需要移除后重新添加。应用没有连接上游自动更新通道，不会被原版覆盖。
-
-下载后若被 macOS 拦截，尝试打开一次，再到「系统设置 → 隐私与安全性」选择「仍要打开」。Release 附带 `SHA256SUMS` 供校验。若找不到 Codex，先退出本应用，再从终端指定 CLI 路径启动：
+默认值：关注区域 **512×512** 逻辑像素，闲置 **2 小时**后刷新会话，插眼 **0.5 小时**后回访。可以在设置中修改，也可以在应用运行时用终端修改：
 
 ```sh
-LOLPINGAI_CODEX="$(command -v codex)" /Applications/LOLPingYourAI.app/Contents/MacOS/LOLPingYourAI
-```
-
-模型服务可能产生账号用量或 API 费用；本应用不提供账号或密钥。
-
-## 约定
-
-| 信号 | 默认行为 |
-| --- | --- |
-| 问号 | 解释或诊断截图区域；只读 |
-| 求助旗帜 | 检查进度并协助；先检索相关上下文，仍不清楚时反问号 |
-| 警告 | 先中断旧动作，再看最新截图和纠错指令 |
-| 正在路上 | 铺满目标窗口，使用可恢复的阅读设置 |
-| 插眼 | **30 分钟后回看一次**，只观察并汇报 |
-| 弱爆 | 表达不满，允许轻度调侃；不会自动撤销工作 |
-| 交战 | 将工作重点转到该目标 |
-| 撤退 | 中断并交还控制权 |
-| 点赞／喝彩 | 认可／庆祝 |
-| 排眼 | 取消该窗口的待执行回访 |
-
-默认区域 **512×512 逻辑像素**，闲置超时 **T＝2 小时**，插眼延迟 **k＝0.5 小时**。这些参数和每个信号的内容／行为都可以在设置中修改。skill 每次读取有效配置。
-
-区域是关注点，执行时可操作所属窗口的其他控件。窗口移动后重新截图定位。屏幕边缘保留正方形留白。定时回访和 agent 反 ping 不刷新用户活跃时间；超时先安全停止，携带简短交接创建新会话。绑定外部聊天采用明确的任务交接，不声称控制原聊天。
-
-Agent 反 ping 使用跨屏统一的先进先出队列：等上一条图标消失且音效实际播放结束后，才展示下一条。可以连续发送多条；用户手动 ping 和预览仍即时响应。
-
-反 ping 可显示在任务区域或当前鼠标旁，无需移动鼠标，也不会再次唤醒 agent。问号表示不明白，正在路上表示收到，交战表示开工，插眼表示登记成功。轻度调侃可关闭，完成时最多回敬一次。
-
-## 表情与素材
-
-- 「表情」支持 PNG/JPG/GIF/WebP 导入及拖入。
-- 「创作表情」支持正方形裁切、缩放与位置调整、保留透明度、去除纯色背景；描述可以附参考图。
-- 队友优先使用已有图像工具，没有时生成原创 SVG；预览标明实际方式，点击添加后才加入列表。
-- 导入表情可选择并绑定自定义指令；未映射表情只表达情绪。
-- 默认使用上游 lolPing 0.5.1 收录的 LoL 原生信号、音效及 44 个动态表情（含原音效）。此前的原创几何图标和合成音效已删除。本地素材包仍可覆盖默认素材，点击「恢复 LoL 素材」可清除覆盖。游戏素材属于 Riot Games，不适用代码的 MIT 许可。
-
-## 开发与命令
-
-先获取源码：
-
-```sh
-git clone https://github.com/ChristianYang37/LOLPingYourAI.git
-cd LOLPingYourAI
-```
-
-需要 Node 22+、pnpm 10；Mac 需要 Xcode 命令行工具，Windows 需要 Visual Studio C++ 构建工具及 .NET Framework C# 编译器。
-
-```sh
-pnpm install --frozen-lockfile --ignore-scripts
-node node_modules/electron/install.js
-pnpm build:helper
-pnpm build:desktop
-pnpm dev
-```
-
-```sh
-pnpm typecheck
-pnpm test:helper
-pnpm test
-pnpm dist:mac
-pnpm exec electron tools/check-assets.cjs # 先执行 pnpm build
-pnpm exec electron tools/check-agent-queue.cjs
-# Windows 上执行：pnpm dist
-```
-
-应用运行时：
-
-```sh
+node ai/cli.mjs help
 node ai/cli.mjs doctor
 node ai/cli.mjs status
 node ai/cli.mjs ping '{"signal":"missing","point":{"x":640,"y":400}}'
@@ -113,16 +143,65 @@ node ai/cli.mjs bind '{"harness":"codex","summary":"任务目标、进度、下�
 node ai/cli.mjs stop
 ```
 
-也可通过包的 `lolpingai` bin 调用。Windows 等不同 shell 建议 `--file payload.json`，避免引号差异。测试用独立窗口：`pnpm exec electron tools/test-board.cjs`。
+也可以通过包的 `lolpingai` bin 调用。shell 引号规则不同时，可用 `--file payload.json`。命令行只连接本机正在运行的应用；`doctor` 会区分“SDK 已安装”和“已登录可用”。按信号定制的中文配置示例见 [examples/config.json](examples/config.json)。
 
-Mac 数据目录是 `~/Library/Application Support/LOLPingYourAI`，Windows 是 `%APPDATA%/LOLPingYourAI`。配置、会话、回访、最近 100 张截图与本地素材保存在这里。截图和指令会发给你选择的 harness／模型服务，使用已有账号。
+## 表情与素材
 
-## Harness 与能力边界
+在「表情」中可以导入 PNG、JPEG、GIF、WebP。「创作表情」支持裁切成正方形、保留透明度或去掉纯色背景，添加前可预览。也可以描述想要的表情，并可附参考图：队友有图像工具就用图像工具，没有就画一个原创 SVG，预览会标明实际用了哪种方式。导入的表情可以绑定自己的指令。
 
-应用负责把 ping 变成结构化事件，加载 skill 并提供桌面工具；理解、检索和执行交给已有 harness。连续 ping 续接固定队友会话，「绑定任务」明确交接目标和进度，不会暗中接管其他聊天。
+内置的信号图标、音效和 44 个动态表情来自上游 lolPing 0.5.1 收录的英雄联盟素材。本地素材包可以覆盖它们，「恢复 LoL 素材」会清除覆盖。
 
-意图不清时优先检索相关历史 session、文件和 memory，但可读范围取决于当前 harness 的工具和权限。本版 Claude 程序化适配器仅允许项目 MCP 工具，尚未开放原生历史／文件工具；不能承诺任意已有聊天或 memory 都能访问。
+## 开发
 
-Codex 用 App Server；Claude 用 Agent SDK＋项目 MCP。检测到原生 Codex Computer Use 时，本 demo 仍使用项目后端，以统一坐标和取消锁；原生后端接入还未完成。Claude 的 macOS 交互式原生 Computer Use 不能当作 Windows／程序化会话的通用实现。SDK 已安装并不代表已登录。
+需要 Node 22+、pnpm 10；macOS 需要 Xcode 命令行工具，Windows 需要 Visual Studio C++ 构建工具和 .NET Framework C# 编译器。
 
-[实测记录](docs/verification.md) 分别列出真实闭环、自动测试与尚未验证的组合。源码使用 MIT，游戏素材保留 Riot Games 权利，保留上游作者署名。源码仓库：[ChristianYang37/LOLPingYourAI](https://github.com/ChristianYang37/LOLPingYourAI)。
+```sh
+git clone https://github.com/ChristianYang37/LOLPingYourAI.git
+cd LOLPingYourAI
+pnpm install --frozen-lockfile --ignore-scripts
+node node_modules/electron/install.js
+pnpm build:helper && pnpm build:desktop
+pnpm dev
+```
+
+<details>
+<summary><b>测试、打包与目录结构</b></summary>
+
+```sh
+pnpm typecheck
+pnpm test:helper                                # C++ 输入助手
+pnpm test                                       # Vitest + AI 桥接测试
+pnpm build && pnpm exec electron tools/check-assets.cjs
+pnpm exec electron tools/check-agent-queue.cjs  # 真实覆盖层 + Web Audio 播放队列
+pnpm exec electron tools/test-board.cjs         # 手动测试用的一次性窗口
+pnpm dist:mac                                   # 在 release/ 生成 Apple Silicon DMG
+pnpm dist                                       # Windows x64 安装包（需在 Windows 上执行）
+```
+
+| 路径 | 内容 |
+| --- | --- |
+| `native/hook-helper/` | C++ 全局输入钩子：按下、拖动、松开、取消（来自 lolPing） |
+| `native/desktop/` | Swift／C# 助手：窗口定位、截图、受限输入 |
+| `src/main/` | Electron 主进程、覆盖层、设置、队友生命周期 |
+| `src/renderer/` | 信号与表情轮盘覆盖层、React 设置窗口 |
+| `ai/` | 队友服务、Codex／Claude 适配器、MCP 服务、本地桥接、命令行 |
+| `skills/lolping-your-ai/` | 教会 agent 理解每个信号的 skill |
+| `promo/` | 演示视频与 README 动图的 Remotion 源码 |
+
+正式包不使用 asar 归档，这样独立的 ESM MCP 服务和原生 `sharp` 依赖在 Electron 内和子 Node 进程中的解析方式完全一致。应用不接入上游的自动更新通道。
+
+</details>
+
+## 欢迎参与
+
+- 在 **Windows** 上跑一跑，告诉我们哪里坏了。
+- 用**已登录的 Claude** 按[验收步骤](docs/acceptance.md)完整走一遍。
+- 物理多显示器、混合 DPI、睡眠／锁屏场景测试。
+- macOS 版本的 Developer ID 签名与公证。
+- 让原生 Computer Use 后端接入统一的取消闸门。
+
+## 致谢与许可
+
+基于 [darrenprx/lolPing](https://github.com/darrenprx/lolPing) 0.5.1 派生，输入助手、轮盘、覆盖层、设置和表情导入都来自它。Copyright © 2026 Danrui Meng，MIT。本仓库代码采用 MIT 许可（[LICENSE](LICENSE)）。
+
+英雄联盟的美术、动画和音效 © Riot Games, Inc.，**不**适用 MIT 许可，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。这是独立的粉丝项目，未获 Riot Games、OpenAI 或 Anthropic 认可。

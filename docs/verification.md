@@ -85,3 +85,13 @@ At the time of the first local verification, no GitHub repository had been creat
 - The application passed strict deep code-signature verification; the DMG passed disk-image verification. SHA-256 is supplied alongside the release download.
 - Scanned tracked history for personal workstation paths and common credential patterns with no matches. Runtime captures, credentials, session records and build output remain excluded from Git.
 - Earlier live desktop evidence above remains the relevant behavioral test record; this documentation/skill packaging update did not repeat a full model-driven editing scenario.
+
+
+## Teammate robustness revision — 2026-10-14
+
+- Claude adapter: built-in tools restricted to read-only `Read`/`Grep`/`Glob` with a `PreToolUse` policy hook; emote reactions queued after the current turn in the same streamed session instead of interrupting it; unpersisted session IDs restarted once; `LOLPINGAI_CLAUDE` executable override.
+- Codex adapter: shared initialization for concurrent callers; active turns fail on App Server exit, and the next call starts a fresh server.
+- Teammate history drops base64 screenshot payloads before the settings window polls it. Teammate replies show only assistant text. The settings panel checks desktop permissions when it opens.
+- CLI: `help`, command validation before contacting the app, and the "start the app" hint only when the app is actually unreachable.
+- Typecheck passed; Vitest 709 passed / 1 skipped; AI bridge tests 31 passed (9 new). New tests drive a stand-in App Server over real stdio JSON-RPC (the concurrency and crash tests fail against the previous adapter), a stand-in Agent SDK that consumes streamed input per turn, the tool policy, and the CLI against a real local bridge. Real Electron asset and five-reply queue checks passed again. C++ helper: 411 passed.
+- Not verified live: no Claude credentials were available on the test machine (the SDK reported "Not logged in"), and Codex CLI was not installed there, so no model-driven turn was repeated for this revision. Earlier live Codex evidence above still describes the desktop loop.

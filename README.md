@@ -1,106 +1,140 @@
+<div align="center">
+
+<img src="build/icon.png" width="104" alt="LOLPingYourAI icon">
+
 # LOLPingYourAI
 
-**Ping anywhere. Your AI teammate gets the context.**
+**Ping anywhere on your desktop. Your AI teammate gets the context.**
 
-An independent desktop demo derived from [lolPing](https://github.com/darrenprx/lolPing). Keep the press–drag–release wheel; send a square screenshot, window identity and a signal-specific instruction to a dedicated Codex or Claude teammate. The teammate can answer with an on-screen ping and use scoped desktop tools.
+Hold <kbd>⌥ Option</kbd>, drag, release on a signal. A League-style ping sends the spot you pointed at, the window it belongs to and what the signal means to your Codex or Claude teammate. It pings back, explains, works in that window, and stops the moment you call **Danger**.
 
-[中文说明](README.zh-CN.md) · [Verification status](docs/verification.md) · [Architecture](docs/architecture.md) · [Attribution](THIRD_PARTY_NOTICES.md)
+<a href="https://github.com/ChristianYang37/LOLPingYourAI/releases/latest"><img src="https://img.shields.io/github/v/release/ChristianYang37/LOLPingYourAI?label=release&color=c8aa6e&labelColor=0a1428" alt="Latest release"></a>
+<a href="https://github.com/ChristianYang37/LOLPingYourAI/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ChristianYang37/LOLPingYourAI/ci.yml?branch=main&label=CI&labelColor=0a1428" alt="CI"></a>
+<img src="https://img.shields.io/badge/macOS-Apple%20Silicon-c8aa6e?labelColor=0a1428&logo=apple&logoColor=white" alt="macOS Apple Silicon">
+<img src="https://img.shields.io/badge/teammate-Codex%20%C2%B7%20Claude-0ac8b9?labelColor=0a1428" alt="Codex and Claude">
+<a href="LICENSE"><img src="https://img.shields.io/badge/code-MIT-1fa9e0?labelColor=0a1428" alt="MIT license for code"></a>
 
-## What it does
+**English** · [简体中文](README.zh-CN.md) · [Download](https://github.com/ChristianYang37/LOLPingYourAI/releases/latest) · [▶ Demo video](docs/media/promo-en.mp4) · [Architecture](docs/architecture.md) · [Verification](docs/verification.md)
 
-- Point at a paper, a confusing UI or a work-in-progress window and ping your teammate.
-- Send the selected region and window context to your existing Codex/Claude harness, with a configurable instruction for each signal.
-- Reuse the harness's own tools and the bundled skill to recover intent from relevant history, project files and memory when available. No separate history or planning engine is added.
-- Receive on-screen replies, interrupt a mistaken action, or leave a persistent 30-minute ward.
-- Customize both wheels, messages and emotes. Agent replies play sequentially, waiting for both the previous visual and sound to finish.
+<br>
 
-| Platform | Status |
-| --- | --- |
-| macOS Apple Silicon + Codex | Real desktop loop tested; DMG available |
-| macOS + Claude | Experimental SDK adapter; authenticated use not tested |
-| Windows + Codex / Claude | Adapters and build scripts included; no local Windows validation |
+<img src="docs/media/hero.gif" width="880" alt="Option-drag opens the League ping wheel over a paper; a question ping sends the highlighted square to the AI teammate, which pings back with an explanation, then types into a practice board after an Assist ping">
 
-## Install on macOS
+<sub>🔊 Full demo with sound (47 s): <a href="docs/media/promo-en.mp4">English</a> · <a href="docs/media/promo-zh.mp4">中文</a></sub>
 
-Download **LOLPingYourAI-0.1.0-arm64.dmg** from [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.0), open it and copy **LOLPingYourAI.app** to Applications. Quit the original lolPing while this app runs: only one global input helper should be active. This local demo is ad-hoc signed, not notarized. macOS may require re-authorizing it after a rebuild; no developer signing identity is bundled.
+</div>
 
-1. Install and sign in to [Codex CLI](https://developers.openai.com/codex/cli/) (`codex login`), or use the CLI bundled with the Codex desktop app. Set `LOLPINGAI_CODEX` before launch if using a different executable.
-2. Open the app. Enable **Accessibility** and **Screen Recording** in System Settings → Privacy & Security for **LOLPingYourAI**. If it is missing from the list, use **+** to add the application. Restart after granting access. A stale permission after a rebuild may need removing and adding the app again.
-3. Open **AI Teammate** in settings. Optionally paste a goal/progress/next-step handoff once.
-4. Hold **Option + left mouse button**, drag, and release on a signal. **Control + drag** opens the emote wheel. Both triggers and wheel slots are editable.
-5. Use **Retreat** or **Control + Option + Escape** to return control. On Windows: **Ctrl + Alt + Escape**.
+## Why
 
-The skill is bundled and loaded automatically; no separate skill installation is needed. The teammate's text, tool approvals, permissions and wards appear in settings. Pings retain the same harness session. Text prompts are passed as structured data, not typed into whichever terminal has focus.
+Writing *"in the PDF on the right, second equation, why divide by √d?"* takes longer than the question itself. In League you'd ping it. LOLPingYourAI brings that to your desktop. One gesture hands your AI teammate three things at once:
 
-If macOS blocks the downloaded app, use **System Settings → Privacy & Security → Open Anyway** after attempting to open it. The demo is not notarized. A custom CLI can be selected when launching from a terminal:
+- **Where:** a 512×512 square around the pointer, mapped back to real screen coordinates.
+- **What:** the window it belongs to (app, title, bounds, a stable window ID).
+- **Intent:** the signal's instruction, such as *explain*, *help finish this*, *stop*, or *check back in 30 minutes*.
 
-```sh
-LOLPINGAI_CODEX="$(command -v codex)" /Applications/LOLPingYourAI.app/Contents/MacOS/LOLPingYourAI
-```
+The teammate is your existing Codex or Claude harness, with its own model, account, tools and memory. LOLPingYourAI adds no planner and no separate history service. It supplies the ping, a bundled skill and a narrow set of desktop tools.
 
-If the app is already running, quit it first. The account/model provider may charge for agent usage; the desktop app does not supply an account or API key. Release assets include `SHA256SUMS` for download verification.
+<table>
+<tr>
+<td width="33%" valign="top"><img src="assets/textures/enemy_missing.png" width="36" alt=""><br><b>Point, don't describe</b><br>The screenshot, window and intent arrive as structured data, not as text typed into whichever terminal has focus.</td>
+<td width="33%" valign="top"><img src="assets/textures/assist_me.png" width="36" alt=""><br><b>Recovers what you meant</b><br>When a ping is ambiguous, the skill searches relevant sessions, project files and memory first. It asks you one focused question only if that isn't enough.</td>
+<td width="33%" valign="top"><img src="assets/textures/pingwheel_retreatrender.png" width="36" alt=""><br><b>Interrupt any time</b><br>Danger and Retreat revoke desktop actions at once. "Stopped" means the harness actually confirmed the cancellation.</td>
+</tr>
+<tr>
+<td valign="top"><img src="assets/textures/omw.png" width="36" alt=""><br><b>It pings you back</b><br>Replies show up on screen as reverse pings: <i>on my way</i>, <i>all in</i>, <i>?</i>. They play one at a time, across displays, without moving your cursor.</td>
+<td valign="top"><img src="assets/textures/need_vision.png" width="36" alt=""><br><b>Wards that come back</b><br>Ward a window and the teammate looks again once, 30 minutes later. The visit survives restarts and sleep, and never runs twice.</td>
+<td valign="top"><img src="assets/textures/emote_super_approved.png" width="36" alt=""><br><b>Your wheel, your emotes</b><br>Rebind slots and messages, import or crop emotes, or ask the teammate to draw one. Send a <i>Weak!</i> and it may talk back.</td>
+</tr>
+</table>
 
 ## Signals
 
-| Signal | Default meaning |
+| | Signal | Your teammate… |
+|:-:|---|---|
+| <img src="assets/textures/enemy_missing.png" width="30" alt=""> | **Question** | explains the square. Observe only. |
+| <img src="assets/textures/assist_me.png" width="30" alt=""> | **Assist** | inspects progress and helps finish. It recovers context first and asks if your intent is still unclear. |
+| <img src="assets/textures/pingwheel_retreatrender.png" width="30" alt=""> | **Danger** | interrupts, looks at a fresh screenshot and your correction, then reassesses. |
+| <img src="assets/textures/omw.png" width="30" alt=""> | **On my way** | expands the target window and improves readability with reversible view changes. |
+| <img src="assets/textures/need_vision.png" width="30" alt=""> | **Ward** | comes back once in **30 minutes**, to observe and report only. |
+| <img src="assets/textures/all_in.png" width="30" alt=""> | **All in** | shifts its work to this target. |
+| <img src="assets/textures/pingwheel_baitrender.png" width="30" alt=""> | **Weak!** | gets a playful complaint. A light comeback is allowed, and nothing is undone automatically. |
+| <img src="assets/textures/retreat_cb_128x128.png" width="30" alt=""> | **Retreat** | stops and hands control back. |
+| <img src="assets/textures/emote_super_approved.png" width="30" alt=""> <img src="assets/textures/emote_gg_heart.png" width="30" alt=""> | **Nice / Celebrate** | keeps going, or celebrates a finished task. |
+| <img src="assets/textures/vision_cleared.png" width="30" alt=""> | **Clear ward** | cancels this window's pending visits. |
+
+The original eight-slot layout is kept. Extra signals are in the slot picker: **Push**, **Attention here**, **Look here**. Every signal's message and behavior (observe, work, correct, stop, ward, emote) can be edited under **AI Teammate** in settings. The skill reads the current configuration on every ping.
+
+## How it works
+
+```mermaid
+sequenceDiagram
+  actor You
+  participant App as LOLPingYourAI
+  participant AI as Codex / Claude
+  You->>App: ⌥ drag, release on "?"
+  Note over App: capture the 512×512 square<br/>and the window identity
+  App->>AI: signal meaning + screenshot + context
+  AI->>App: MCP get_context, screenshot
+  AI->>App: MCP reply_ping "on my way"
+  App-->>You: reverse ping on screen + answer
+  You->>App: Assist ping on unfinished work
+  AI->>App: MCP desktop_action (that window only)
+  You->>App: Danger!
+  App->>AI: revoke actions, interrupt turn
+  AI-->>App: cancellation confirmed
+```
+
+The native helper inherited from lolPing handles press, drag, release and cancel. A confirmed ping is captured and passed to a **persistent teammate session**. The same thread is kept between pings and is safely replaced after 2 idle hours, carrying a short handoff. The agent then works through a local MCP server: `get_context`, `screenshot`, `desktop_action`, `reply_ping`, `save_handoff`, `ward` and `submit_icon`. One action gate serializes desktop operations, and a correction invalidates every older one. Details are in [docs/architecture.md](docs/architecture.md).
+
+## Quick start (macOS)
+
+1. **Install.** Download **LOLPingYourAI-0.1.0-arm64.dmg** from [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.0) and drag the app to Applications. Quit the original lolPing first: only one global input helper should run at a time.
+2. **Connect a teammate.** Install and sign in to [Codex CLI](https://developers.openai.com/codex/cli/) (`codex login`). The CLI bundled with the Codex desktop app is found automatically. Claude is experimental (see [Platform status](#platform-status)).
+3. **Grant permissions.** Open the app, then enable **Accessibility** and **Screen Recording** for LOLPingYourAI in *System Settings → Privacy & Security* and restart it. **AI Teammate** in settings shows both checks.
+4. **Ping.** Hover anything, hold <kbd>⌥ Option</kbd> + left mouse, drag, and release on **?**. <kbd>⌃ Control</kbd> + drag opens the emote wheel.
+5. **Take control back** with **Retreat** or <kbd>⌃ Control</kbd> <kbd>⌥ Option</kbd> <kbd>Esc</kbd> (<kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>Esc</kbd> on Windows).
+
+Optional: paste a *goal / progress / next step* once under **AI Teammate → Task handoff**. Later pings continue from it.
+
+<details>
+<summary><b>Troubleshooting</b></summary>
+
+- **"Apple could not verify…"**: this demo is ad-hoc signed and not notarized. Try to open it once, then choose **System Settings → Privacy & Security → Open Anyway**. If macOS says the app "is damaged", run `xattr -dr com.apple.quarantine /Applications/LOLPingYourAI.app`.
+- **The app isn't in the permission list**: add it with **+**. After a rebuild or update, a stale permission may need removing (**–**) and adding again.
+- **Codex not found**: quit the app and launch it with an explicit CLI path:
+  ```sh
+  LOLPINGAI_CODEX="$(command -v codex)" /Applications/LOLPingYourAI.app/Contents/MacOS/LOLPingYourAI
+  ```
+  `LOLPINGAI_CLAUDE` does the same for a specific Claude Code executable.
+- **Approvals**: tool approvals, questions and permission requests from the harness appear under **AI Teammate**. Nothing is silently accepted.
+- **Cost**: your model provider may charge for agent usage. The app supplies no account or API key. Release assets include `SHA256SUMS`.
+
+</details>
+
+## Platform status
+
+| Combination | Status |
 | --- | --- |
-| Question | Explain the square; observation only |
-| Assist | Inspect progress and help; recover context, then ask if intent remains unclear |
-| Danger | Interrupt, inspect the correction, reassess |
-| On my way | Expand the target window; improve reading with reversible view changes |
-| Ward | One observation-only follow-up in **30 minutes** |
-| Weak! | Playful dissatisfaction; no automatic undo |
-| All in | Shift work to this target |
-| Retreat | Interrupt and return control |
-| Nice / Celebrate | Express approval or celebrate |
-| Clear ward | Cancel this window's pending visits |
+| macOS Apple Silicon + **Codex** | ✅ Real desktop loop tested with a live model (explain, edit, interrupt, restore, maximize, ward). DMG available. |
+| macOS + **Claude** | 🧪 Experimental Agent SDK adapter with read-only context tools. Covered by tests, not yet run with a signed-in account. |
+| Windows + Codex / Claude | 🛠️ Adapters, Win32 helper and installer scripts included. Not validated on a Windows machine yet. |
 
-The original eight-slot layout is retained. Extra signals are available in the slot picker. Edit any signal's message and behavior in Teammate settings. Default focus is **512×512 logical pixels**, idle session refresh **2 hours**, and ward delay **0.5 hours**. These values are runtime settings; the skill reads the current configuration on every ping.
+What was actually exercised, and what wasn't, is recorded in [docs/verification.md](docs/verification.md).
 
-Agent replies use one FIFO queue across displays. Each reply waits for both the previous visual removal and actual audio completion. Bursts enqueue immediately; user pings and previews remain immediate.
+## Safety and privacy
 
-Agent pings appear at the current target or pointer without moving the mouse and never trigger another agent turn. Native Codex Computer Use is detected, but this demo uses the project MCP backend for a shared action lock and coordinate mapping. See the validation matrix for actual coverage.
+- **Local only.** The MCP server talks to the app over loopback with a random per-launch token. Browser-origin requests are refused. Captures, sessions, wards and tokens stay in `~/Library/Application Support/LOLPingYourAI` (`%APPDATA%/LOLPingYourAI` on Windows) and never belong in Git.
+- **Scoped actions.** Question and ward visits cannot click or type. The window is re-resolved before every action, coordinates go stale when it moves, and a closed, locked or ambiguous target fails visibly.
+- **Data to your provider.** The square and the instruction go to the harness and model you chose, under your existing account.
+- **Claude's tools.** Only read-only `Read`, `Grep` and `Glob` plus the desktop tools are exposed. A pre-tool hook refuses credential folders, key files, whole-home sweeps and every other tool, even ones your global Claude settings allow.
+- **Not a sandbox.** These controls protect the backend this project ships. Extra plugins you add to a harness are outside them.
 
-## Emotes and local art
+## Configuration and CLI
 
-Import PNG/JPEG/GIF/WebP in **Emotes**. In **Create an emote**, crop an image to a square, preserve transparency or remove a flat background, and preview before adding it. A description plus optional reference image goes to the teammate: available image tools are preferred, otherwise it draws an original SVG. The preview labels the actual method. Imported emotes can have custom instructions and behaviors.
-
-The bundled ping textures, WAV sounds and 44 animated emotes with OGG sounds are the League of Legends assets included by upstream lolPing 0.5.1. The previous geometric artwork and synthesized tones have been removed. Local packs may still override recognized textures/sounds; **Restore LoL pack** removes those overrides. Game assets belong to Riot Games and are excluded from the code's MIT license.
-
-## Develop
-
-Clone this repository first:
+Defaults: focus square **512×512** logical pixels, session refresh after **2 h** idle, ward delay **0.5 h**. Change them in settings or from a terminal while the app runs:
 
 ```sh
-git clone https://github.com/ChristianYang37/LOLPingYourAI.git
-cd LOLPingYourAI
-```
-
-Requirements: Node 22+, pnpm 10, Codex CLI authentication; Xcode command-line tools on macOS. On Windows, install Visual Studio C++ build tools and the .NET Framework C# compiler. Claude requires its own authentication/subscription or API credentials; installing the SDK alone does not establish access.
-
-```sh
-pnpm install --frozen-lockfile --ignore-scripts
-node node_modules/electron/install.js
-pnpm build:helper
-pnpm build:desktop
-pnpm dev
-```
-
-```sh
-pnpm typecheck
-pnpm test:helper
-pnpm test
-pnpm exec electron tools/check-assets.cjs # after pnpm build
-pnpm exec electron tools/check-agent-queue.cjs
-pnpm dist:mac    # Apple Silicon DMG in release/
-pnpm dist        # Windows x64 installer, run on Windows
-```
-
-The production app intentionally ships without an asar archive so its standalone ESM MCP server and native sharp dependencies resolve identically inside Electron and child Node mode. It has no upstream automatic update channel. CI is configured for macOS and Windows; configuration is not evidence that CI has run.
-
-With the app running:
-
-```sh
+node ai/cli.mjs help
 node ai/cli.mjs doctor
 node ai/cli.mjs status
 node ai/cli.mjs ping '{"signal":"missing","point":{"x":640,"y":400}}'
@@ -109,18 +143,65 @@ node ai/cli.mjs bind '{"harness":"codex","summary":"Goal, progress, next step"}'
 node ai/cli.mjs stop
 ```
 
-On shells with different quoting rules, use `--file payload.json`. `lolpingai` is also the package bin entry. The CLI talks only to the running local app; `doctor` distinguishes SDK availability from authenticated live operation. `tools/test-board.cjs` is a disposable Electron window for manual integration tests: `pnpm exec electron tools/test-board.cjs`.
+`lolpingai` is also the package bin. Where shell quoting differs, use `--file payload.json`. The CLI talks only to the running local app. `doctor` tells SDK availability apart from authenticated live operation. A per-signal example config is in [examples/config.json](examples/config.json).
 
-## Harness integration
+## Emotes and art
 
-Codex is managed through App Server; Claude uses the Agent SDK. The app delivers structured events, invokes the skill and supplies desktop MCP tools; the existing harness performs the reasoning and work. A teammate session is retained between pings. **Bind task** accepts an explicit handoff into that session, rather than silently taking over an arbitrary existing chat.
+Import PNG, JPEG, GIF or WebP under **Emotes**. **Create an emote** lets you crop to a square, keep transparency or remove a flat background, and preview before adding. You can also describe one, optionally with a reference image. The teammate uses an image tool if it has one, otherwise it draws an original SVG, and the preview labels which method it used. Imported emotes can carry their own instructions.
 
-When an assist ping is ambiguous, the skill asks the agent to search relevant session history, files and memory with the harness's existing tools before asking you. Availability depends on the harness and its permissions. In this release, Claude's programmatic adapter permits project MCP tools only, so native history/file tools are not enabled there. Neither adapter promises access to every desktop chat or memory store.
+The bundled ping textures, sounds and 44 animated emotes are the League of Legends assets that upstream lolPing 0.5.1 ships. A local pack can override them, and **Restore LoL pack** removes the override.
 
-## Data and boundaries
+## Develop
 
-Runtime data lives under `~/Library/Application Support/LOLPingYourAI` on macOS or `%APPDATA%/LOLPingYourAI` on Windows. It includes captures (latest 100), sessions, wards, local emotes and a per-launch bridge token. Nothing from this directory is committed. Screenshots and instructions are sent to the selected harness/provider using your existing account. The protocol does not type credentials or arbitrary strings into a shell.
+Requirements: Node 22+, pnpm 10 and Xcode command-line tools on macOS. On Windows: Visual Studio C++ build tools and the .NET Framework C# compiler.
 
-Question/ward contexts reject desktop mutations. Window identity is re-resolved before actions; moved windows require fresh coordinates. Old operations are revoked before interruption, and “stopped” means the adapter confirmed cancellation. Close/locked/ambiguous targets fail visibly. These controls cover the provided backend; arbitrary additional harness plugins are not an OS sandbox.
+```sh
+git clone https://github.com/ChristianYang37/LOLPingYourAI.git
+cd LOLPingYourAI
+pnpm install --frozen-lockfile --ignore-scripts
+node node_modules/electron/install.js
+pnpm build:helper && pnpm build:desktop
+pnpm dev
+```
 
-MIT for code; Riot Games retains rights to game artwork and audio. Upstream copyright is retained; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).
+<details>
+<summary><b>Tests, packaging and project layout</b></summary>
+
+```sh
+pnpm typecheck
+pnpm test:helper                                # C++ input helper
+pnpm test                                       # Vitest + AI bridge tests
+pnpm build && pnpm exec electron tools/check-assets.cjs
+pnpm exec electron tools/check-agent-queue.cjs  # real overlay + Web Audio queue
+pnpm exec electron tools/test-board.cjs         # disposable window for manual tests
+pnpm dist:mac                                   # Apple Silicon DMG in release/
+pnpm dist                                       # Windows x64 installer (run on Windows)
+```
+
+| Path | What lives there |
+| --- | --- |
+| `native/hook-helper/` | C++ global input hook: press, drag, release, cancel (from lolPing) |
+| `native/desktop/` | Swift / C# helpers: window lookup, capture, scoped input |
+| `src/main/` | Electron main process, overlays, settings, teammate lifecycle |
+| `src/renderer/` | Ping and emote wheel overlay, React settings window |
+| `ai/` | Teammate service, Codex and Claude adapters, MCP server, local bridge, CLI |
+| `skills/lolping-your-ai/` | The skill that teaches the agent what each ping means |
+| `promo/` | Remotion source for the demo video and README media |
+
+The production app ships without an asar archive so its standalone ESM MCP server and native `sharp` dependency resolve the same way inside Electron and in child Node mode. There is no upstream auto-update channel.
+
+</details>
+
+## Help wanted
+
+- Run it on **Windows** and report what breaks.
+- A first **signed-in Claude** run through the [acceptance script](docs/acceptance.md).
+- Physical multi-monitor, mixed-DPI and sleep/lock testing.
+- Developer ID signing and notarization for the macOS build.
+- Integrating native Computer Use backends with the shared cancellation gate.
+
+## Credits and license
+
+Derived from [darrenprx/lolPing](https://github.com/darrenprx/lolPing) 0.5.1, which provides the input helper, radial wheels, overlays, settings and emote import. Copyright © 2026 Danrui Meng, MIT. Code in this repository is MIT ([LICENSE](LICENSE)).
+
+League of Legends artwork, animations and audio © Riot Games, Inc. They are **not** covered by the MIT license; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This is an independent fan project, not endorsed by Riot Games, OpenAI or Anthropic.

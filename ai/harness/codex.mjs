@@ -4,8 +4,9 @@ import { EventEmitter } from 'node:events';
 
 export class CodexAdapter extends EventEmitter {
   constructor({ command = 'codex', cwd, mcp, skillPath }) { super(); Object.assign(this, { command, cwd, mcp, skillPath }); this.pending = new Map(); this.active = new Map(); this.nextId = 1; this.loaded = new Set(); }
-  async connect() {
-    if (this.child) return;
+  // Every caller waits for the same initialization; requests sent before `initialized` would be rejected.
+  connect() { return this.ready ??= this.start().catch(error => { this.ready = null; throw error; }); }
+  async start() {
     const args = ['app-server', '--listen', 'stdio://', '-c', 'mcp_servers.lolpingyourai.default_tools_approval_mode="approve"'];
     const entries = { command: this.mcp.command, args: this.mcp.args, env_vars: Object.keys(this.mcp.env) };
     for (const [key, value] of Object.entries(entries)) {
@@ -14,8 +15,16 @@ export class CodexAdapter extends EventEmitter {
     }
     const child = this.child = spawn(this.command, args, { cwd: this.cwd, env: { ...process.env, ...this.mcp.env }, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
     child.stderr.on('data', data => this.emit('diagnostic', data.toString().slice(0, 3000)));
-    child.on('error', error => this.fail(error));
-    child.on('exit', () => { this.child = null; this.loaded.clear(); this.active.clear(); this.fail(new Error('Codex app-server exited')); });
+    child.stdin.on('error', () => {}); // Reported through the child's error/exit events.
+    const detach = () => { if (this.child !== child) return false; this.child = null; this.ready = null; this.loaded.clear(); return true; };
+    child.on('error', error => { if (child.pid === undefined) detach(); this.fail(error); }); // No pid: it never started.
+    child.on('exit', () => {
+      if (!detach()) return;
+      const turns = [...this.active]; this.active.clear();
+      this.fail(new Error('Codex app-server exited'));
+      // Interrupts and ward follow-ups wait for completion; a dead server can no longer send it.
+      for (const [threadId, id] of turns) this.emit('completed', { threadId, turn: { id, status: 'failed' } });
+    });
     createInterface({ input: child.stdout }).on('line', line => {
       let message; try { message = JSON.parse(line); } catch { return; }
       if (message.id !== undefined && this.pending.has(message.id)) {
