@@ -11,8 +11,16 @@ test('tracked captures select window identity and pad a 2x negative-coordinate s
   const bounds = { x: -950, y: 50, width: 300, height: 200 }, target = { id: '44', pid: 3, bounds, relative: { x: .5, y: .5 } };
   const png = await sharp({ create: { width: 600, height: 400, channels: 4, background: '#ff0000' } }).png().toBuffer();
   const display = { id: 5, bounds: { x: -1024, y: 0, width: 1024, height: 768 }, scaleFactor: 2 };
-  const desktop = new Desktop({ dataDir: dir, overlays: { captureWithoutOverlays: fn => fn() }, electron: { screen: { getDisplayNearestPoint: () => display }, desktopCapturer: { getSources: async options => { assert.deepEqual(options.types, ['window']); return [{ id: 'window:44:0', thumbnail: { isEmpty: () => false, getSize: () => ({ width: 600, height: 400 }), toPNG: () => png } }]; } } } });
-  desktop.native = async op => op === 'doctor' ? { locked: false, screenRecording: true } : target;
+  const desktop = new Desktop({ dataDir: dir, overlays: { captureWithoutOverlays: fn => fn() }, electron: { screen: {
+    getDisplayNearestPoint: () => display,
+    screenToDipRect: (_window, rect) => Object.fromEntries(Object.entries(rect).map(([key, value]) => [key, value / 2])),
+    dipToScreenPoint: point => ({ x: point.x * 2, y: point.y * 2 }),
+  }, desktopCapturer: { getSources: async options => { assert.deepEqual(options.types, ['window']); return [{ id: 'window:44:0', thumbnail: { isEmpty: () => false, getSize: () => ({ width: 600, height: 400 }), toPNG: () => png } }]; } } } });
+  // Win32 reports physical pixels; the public capture contract uses logical pixels.
+  const nativeTarget = process.platform === 'win32'
+    ? { ...target, bounds: Object.fromEntries(Object.entries(bounds).map(([key, value]) => [key, value * 2])) }
+    : target;
+  desktop.native = async op => op === 'doctor' ? { locked: false, screenRecording: true } : nativeTarget;
   try {
     const capture = await desktop.capture(target, 512, true);
     assert.equal(capture.region.captureKind, 'window'); assert.equal(capture.region.scaleFactor, 2);
