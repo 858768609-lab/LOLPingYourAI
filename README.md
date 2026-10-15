@@ -6,7 +6,7 @@
 
 **Ping anywhere on your desktop. Your AI teammate gets the context.**
 
-Hold <kbd>⌥ Option</kbd>, drag, release on a signal. A League-style ping sends the spot you pointed at, the window it belongs to and what the signal means to your Codex or Claude teammate. It pings back, explains, works in that window, and stops the moment you call **Danger**.
+Hold <kbd>Alt</kbd> on Windows or <kbd>⌥ Option</kbd> on macOS, drag with the left mouse button, and release on a signal. A League-style ping sends the spot you pointed at, the window it belongs to and what the signal means to your Codex or Claude teammate. It pings back, explains, works in that window, and stops the moment you call **Danger**.
 
 <a href="https://github.com/ChristianYang37/LOLPingYourAI/releases/latest"><img src="https://img.shields.io/github/v/release/ChristianYang37/LOLPingYourAI?label=release&color=c8aa6e&labelColor=0a1428" alt="Latest release"></a>
 <a href="https://github.com/ChristianYang37/LOLPingYourAI/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ChristianYang37/LOLPingYourAI/ci.yml?branch=main&label=CI&labelColor=0a1428" alt="CI"></a>
@@ -24,11 +24,20 @@ Hold <kbd>⌥ Option</kbd>, drag, release on a signal. A League-style ping sends
 
 </div>
 
+## Changes in this branch
+
+- **Simplified Chinese by default**, including teammate controls and signal instructions.
+- **Choose the question screenshot.** The question icon finishes its animation before a movable, resizable selection frame appears. Adjust it or draw a new rectangle, then click **发送截图** or press <kbd>Enter</kbd> to send. <kbd>Esc</kbd> cancels without sending.
+- **A separate desktop reply window** shows progress and streaming answers while the settings window is closed. Move or resize it, toggle always-on-top, or hide it; the app must remain running in the tray with pings enabled.
+- **App-specific Codex model and reasoning effort.** Under **AI 队友**, choose **使用模型** and **响应速度** for the next signal. The default inherits your Codex model and uses low reasoning effort. These settings do not modify the global Codex configuration; model availability depends on your account.
+
+The release links and demo media above belong to the upstream project. Build this branch from source to use these changes; see the Windows steps below.
+
 ## Why
 
 Writing *"in the PDF on the right, second equation, why divide by √d?"* takes longer than the question itself. In League you'd ping it. LOLPingYourAI brings that to your desktop. One gesture hands your AI teammate three things at once:
 
-- **Where:** a 512×512 square around the pointer, mapped back to real screen coordinates.
+- **Where:** your selected rectangle for a question, or a 512×512 square around the pointer for other screenshot signals, mapped back to real screen coordinates.
 - **What:** the window it belongs to (app, title, bounds, a stable window ID).
 - **Intent:** the signal's instruction, such as *explain*, *help finish this*, *stop*, or *check back in 30 minutes*.
 
@@ -71,12 +80,14 @@ sequenceDiagram
   actor You
   participant App as LOLPingYourAI
   participant AI as Codex / Claude
-  You->>App: ⌥ drag, release on "?"
-  Note over App: capture the 512×512 square<br/>and the window identity
+  You->>App: Alt / ⌥ drag, release on "?"
+  App-->>You: complete icon animation, then show selection frame
+  You->>App: adjust selection and confirm
+  Note over App: capture the selected rectangle<br/>and the window identity
   App->>AI: signal meaning + screenshot + context
   AI->>App: MCP get_context, screenshot
-  AI->>App: MCP reply_ping "on my way"
-  App-->>You: reverse ping on screen + answer
+  App-->>You: progress + streaming answer in desktop reply window
+  AI->>App: optional MCP reply_ping
   You->>App: Assist ping on unfinished work
   AI->>App: MCP desktop_action (that window only)
   You->>App: Danger!
@@ -86,7 +97,36 @@ sequenceDiagram
 
 The native helper inherited from lolPing handles press, drag, release and cancel. A confirmed ping is captured and passed to a **persistent teammate session**. The same thread is kept between pings and is safely replaced after 2 idle hours, carrying a short handoff. The agent then works through a local MCP server: `get_context`, `screenshot`, `desktop_action`, `reply_ping`, `save_handoff`, `ward` and `submit_icon`. One action gate serializes desktop operations, and a correction invalidates every older one. Details are in [docs/architecture.md](docs/architecture.md).
 
-## Quick start (macOS)
+## Quick start (Windows, from source)
+
+Install Node.js 22+, pnpm 10, Visual Studio Build Tools with **Desktop development with C++**, and the .NET Framework C# compiler. Install and sign in to [Codex CLI](https://developers.openai.com/codex/cli/) with `codex login`; the CLI installed by the Codex desktop app is also detected automatically. Download or clone this repository, then run these commands in its root directory using PowerShell:
+
+```powershell
+pnpm install --frozen-lockfile --ignore-scripts
+node node_modules/electron/install.js
+pnpm build:helper
+pnpm build:desktop
+pnpm dev
+```
+
+To build an unpacked application without creating an installer, stop the development instance and run:
+
+```powershell
+pnpm build
+pnpm exec electron-builder --win --dir --publish never
+.\启动中文版.cmd
+```
+
+The launcher opens `release\win-unpacked\LOLPingYourAI.exe`. To create the Windows installer instead, run `pnpm dist`; it also builds both native helpers and the application.
+
+1. Enable pings in the tray. Hold <kbd>Alt</kbd> and drag with the left mouse button to choose a signal; <kbd>Ctrl</kbd> + left-drag opens the emote wheel.
+2. Release on **?**, wait for the icon to finish, adjust the screenshot frame, then confirm with **发送截图** or <kbd>Enter</kbd>. Press <kbd>Esc</kbd> to cancel.
+3. Read progress and the answer in the desktop reply window. Configure its visibility and always-on-top behavior under **AI 队友**; closing settings does not close the reply window.
+4. Use **Retreat** or <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Esc</kbd> to stop the teammate.
+
+If Codex cannot be found, set `LOLPINGAI_CODEX` to your CLI executable path before launching. No macOS Accessibility or Screen Recording settings are required on Windows.
+
+## Quick start (macOS, upstream release)
 
 1. **Install.** Download **LOLPingYourAI-0.1.0-arm64.dmg** from [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.0) and drag the app to Applications. Quit the original lolPing first: only one global input helper should run at a time.
 2. **Connect a teammate.** Install and sign in to [Codex CLI](https://developers.openai.com/codex/cli/) (`codex login`). The CLI bundled with the Codex desktop app is found automatically. Claude is experimental (see [Platform status](#platform-status)).
@@ -117,9 +157,10 @@ Optional: paste a *goal / progress / next step* once under **AI Teammate → Tas
 | --- | --- |
 | macOS Apple Silicon + **Codex** | ✅ Real desktop loop tested with a live model (explain, edit, interrupt, restore, maximize, ward). DMG available. |
 | macOS + **Claude** | 🧪 Experimental Agent SDK adapter with read-only context tools. Covered by tests, not yet run with a signed-in account. |
-| Windows + Codex / Claude | 🛠️ Adapters, Win32 helper and installer scripts included. Not validated on a Windows machine yet. |
+| Windows 10 x64 + **Codex** | ✅ Locally validated on one display: build/startup, Chinese input, capture selection and cancellation, live-model read-only replies, and the desktop reply window. Physical multi-monitor and mixed-DPI behavior remain unverified. |
+| Windows + **Claude** | 🧪 Adapter included; signed-in live operation has not been validated. |
 
-What was actually exercised, and what wasn't, is recorded in [docs/verification.md](docs/verification.md).
+The Windows result above applies to this branch. [docs/verification.md](docs/verification.md) contains the upstream verification record.
 
 ## Safety and privacy
 
@@ -156,7 +197,7 @@ The bundled ping textures, sounds and 44 animated emotes are the League of Legen
 Requirements: Node 22+, pnpm 10 and Xcode command-line tools on macOS. On Windows: Visual Studio C++ build tools and the .NET Framework C# compiler.
 
 ```sh
-git clone https://github.com/ChristianYang37/LOLPingYourAI.git
+# Clone this branch using the URL under this repository's Code button first.
 cd LOLPingYourAI
 pnpm install --frozen-lockfile --ignore-scripts
 node node_modules/electron/install.js
@@ -194,7 +235,7 @@ The production app ships without an asar archive so its standalone ESM MCP serve
 
 ## Help wanted
 
-- Run it on **Windows** and report what breaks.
+- Test additional **Windows** configurations, including Windows 11, and report what breaks.
 - A first **signed-in Claude** run through the [acceptance script](docs/acceptance.md).
 - Physical multi-monitor, mixed-DPI and sleep/lock testing.
 - Developer ID signing and notarization for the macOS build.

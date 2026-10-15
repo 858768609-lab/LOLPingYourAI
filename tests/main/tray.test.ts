@@ -115,7 +115,7 @@ describe('AppTray', () => {
     const teammate = vi.fn();
     new AppTray('icon.png', { ...handlers, teammate });
     expect(menuOf().some(i => i.label === 'Room')).toBe(false);
-    const item = menuOf().find(i => i.label === 'AI Teammate / 队友')!;
+    const item = menuOf().find(i => i.label === 'AI 队友')!;
     item.click!({});
     expect(teammate).toHaveBeenCalledOnce();
   });

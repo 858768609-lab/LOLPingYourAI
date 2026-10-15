@@ -93,7 +93,7 @@ export const DEFAULT_SETTINGS: Settings = {
   muted: false,
   tickSound: true,
   launchAtStartup: false,
-  language: 'auto',
+  language: 'zh-CN',
   displayName: 'Player',
   tagColor: 0,
   incomingPingLimit: 5,

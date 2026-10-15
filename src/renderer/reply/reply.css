@@ -1,0 +1,26 @@
+:root { font-family: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif; color: #eaf0fb; background: #141c2b; color-scheme: dark; font-size: 14px; }
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+button { -webkit-app-region: no-drag; font: inherit; color: #dce7fa; background: #25334b; border: 1px solid #3b4b65; border-radius: 6px; padding: 5px 9px; cursor: pointer; white-space: nowrap; }
+button:hover { background: #344862; }
+button:focus-visible { outline: 2px solid #69c8ff; outline-offset: 2px; }
+button:disabled { opacity: .45; cursor: default; }
+.reply-window { display: flex; flex-direction: column; height: 100%; border: 1px solid #3e526d; border-radius: 8px; overflow: hidden; }
+.reply-header { -webkit-app-region: drag; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px; background: #1b2639; flex-shrink: 0; user-select: none; }
+.reply-header strong { font-size: 14px; white-space: nowrap; }
+.reply-actions { display: flex; gap: 5px; }
+.reply-actions button { font-size: 12px; padding: 4px 7px; }
+.reply-actions .selected { color: #a9e8ff; border-color: #4b99bd; background: #173b51; }
+.reply-progress { display: flex; align-items: center; gap: 8px; padding: 12px 14px; color: #b4c5de; font-size: 12px; flex-shrink: 0; }
+.reply-progress time { margin-left: auto; font-variant-numeric: tabular-nums; }
+.status-dot { width: 7px; height: 7px; background: #7f94ab; border-radius: 50%; flex-shrink: 0; }
+.status-dot.busy { background: #5cd9ef; }
+.reply-content { min-height: 0; flex: 1; overflow: auto; padding: 2px 15px 16px; }
+.reply-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; user-select: text; }
+.reply-empty { padding-top: 24px; color: #c3cee0; line-height: 1.8; }
+.reply-empty span { display: block; margin-top: 12px; color: #8296b3; font-size: 12px; }
+.reply-alert { margin: 0 12px 10px; padding: 9px; border: 1px solid #816940; background: #342d22; border-radius: 6px; color: #ffdda4; font-size: 12px; }
+.reply-alert button { margin-top: 6px; }
+footer { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; border-top: 1px solid #2b3951; flex-shrink: 0; }
+footer span { color: #93a7c3; font-size: 11px; }
+footer .stop { color: #ffc0c0; border-color: #75515d; background: #3f2935; }

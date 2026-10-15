@@ -73,9 +73,9 @@ describe('language', () => {
   });
 
   it('defaults to auto and rejects unknown values', () => {
-    expect(normalizeSettings({}).language).toBe('auto');
+    expect(normalizeSettings({}).language).toBe('zh-CN');
     expect(normalizeSettings({ language: 'zh-CN' }).language).toBe('zh-CN');
-    expect(normalizeSettings({ language: 'fr' }).language).toBe('auto');
+    expect(normalizeSettings({ language: 'fr' }).language).toBe('zh-CN');
   });
 
   it('translates mouse trigger names only', () => {

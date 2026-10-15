@@ -226,11 +226,10 @@ async function start(): Promise<void> {
   app.on('before-quit', (event) => {
     if (quitting) return;
     quitting = true;
-    teammate.close();
     event.preventDefault();
     stopWaitingForAccess();
     tray.destroy();
     overlays.destroy();
-    void Promise.allSettled([bridge.stop(), store.flush()]).then(() => app.exit(0));
+    void Promise.allSettled([teammate.close(), bridge.stop(), store.flush()]).then(() => app.exit(0));
   });
 }

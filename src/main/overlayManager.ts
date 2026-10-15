@@ -2,7 +2,8 @@ import { BrowserWindow, ipcMain, screen, type Display, type WebContents } from '
 import { EventEmitter } from 'node:events';
 import { isEmoteRefShape, type EmoteArt, type EmoteRef } from '../shared/emotes';
 import {
-  AGENT_PING_ENDED, OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents, type PingTag,
+  AGENT_PING_ENDED, OVERLAY_ASSETS, OVERLAY_EMOTED, OVERLAY_PINGED, SELECTION_READY, SELECTION_RESULT,
+  type OverlayChannel, type OverlayEvents, type PingTag, type ScreenshotSelection,
 } from '../shared/ipc';
 import { isPingId, type PingId } from '../shared/pings';
 import type { HelperEvent, WheelKind } from '../shared/protocol';
@@ -17,6 +18,7 @@ export interface SharedPing {
   displayId: number;
   x: number;
   y: number;
+  selection?: ScreenshotSelection;
 }
 
 /** An emote the user just placed, in overlay-local CSS px: the room shares these. */
@@ -45,6 +47,9 @@ export class OverlayManager extends EventEmitter {
   private agentActive: (SharedPing & { tag: PingTag; requestId: number }) | null = null;
   private agentSequence = 0;
   private ready = new Set<number>();
+  private selectionSequence = 0;
+  private selectionActive: (SharedPing & { requestId: number; selecting: boolean }) | null = null;
+  private readonly captureWindows = new Set<BrowserWindow>();
 
   /** `resolveArt` says what an emote looks like: `remote` is true for a room member's, whose files may be missing here. */
   constructor(private settings: OverlaySettings, private readonly resolveArt: (ref: EmoteRef, remote: boolean) => EmoteArt) {
@@ -52,6 +57,31 @@ export class OverlayManager extends EventEmitter {
   }
 
   start(): void {
+    ipcMain.on(SELECTION_READY, (event, requestId: unknown) => {
+      const active = this.selectionActive;
+      if (!active || active.requestId !== requestId || active.selecting || this.displayOf(event.sender) !== active.displayId) return;
+      const win = this.windows.get(active.displayId);
+      if (!win || win.isDestroyed()) { this.cancelSelection(); return; }
+      active.selecting = true;
+      win.setFocusable(true);
+      win.setIgnoreMouseEvents(false);
+      win.show(); win.focus();
+      this.send(active.displayId, 'selection:show', { x: active.x, y: active.y, requestId: active.requestId, size: 512 });
+    });
+    ipcMain.on(SELECTION_RESULT, (event, raw: unknown) => {
+      const p = raw as { requestId?: unknown; selection?: unknown } | null;
+      const active = this.selectionActive;
+      if (!p || !active || !active.selecting || p.requestId !== active.requestId || this.displayOf(event.sender) !== active.displayId) return;
+      if (p.selection === null) { this.cancelSelection(); return; }
+      const r = p.selection as Partial<ScreenshotSelection> | null;
+      const bounds = this.maps.find(d => d.id === active.displayId)?.dip;
+      if (!r || !bounds || !isNum(r.x) || !isNum(r.y) || !isNum(r.width) || !isNum(r.height)
+        || r.x < 0 || r.y < 0 || r.width < 1 || r.height < 1
+        || r.x + r.width > bounds.width || r.y + r.height > bounds.height) return;
+      const selection: ScreenshotSelection = { x: r.x, y: r.y, width: r.width, height: r.height };
+      this.cancelSelection();
+      this.emit('shared', { id: active.id, displayId: active.displayId, x: active.x, y: active.y, selection } satisfies SharedPing);
+    });
     ipcMain.on(AGENT_PING_ENDED, (event, requestId: unknown) => {
       if (!this.agentActive || requestId !== this.agentActive.requestId || this.displayOf(event.sender) !== this.agentActive.displayId) return;
       this.agentActive = null;
@@ -65,7 +95,11 @@ export class OverlayManager extends EventEmitter {
       const p = raw as { id?: unknown; x?: unknown; y?: unknown } | null;
       if (!p || !isPingId(p.id) || !isNum(p.x) || !isNum(p.y)) return;
       const displayId = this.displayOf(event.sender);
-      if (displayId !== undefined) this.emit('shared', { id: p.id, displayId, x: p.x, y: p.y } satisfies SharedPing);
+      if (displayId !== undefined) {
+        const ping = { id: p.id, displayId, x: p.x, y: p.y };
+        if (p.id === 'missing') this.prepareSelection(ping);
+        else this.emit('shared', ping satisfies SharedPing);
+      }
     });
     ipcMain.on(OVERLAY_EMOTED, (event, raw: unknown) => {
       const p = raw as { ref?: unknown; x?: unknown; y?: unknown } | null;
@@ -90,6 +124,7 @@ export class OverlayManager extends EventEmitter {
   handle(ev: HelperEvent): void {
     switch (ev.type) {
       case 'wheelOpen': {
+        this.cancelSelection();
         const p = physicalToLocal(ev.x, ev.y, this.maps);
         if (!p) return;
         this.wheelDisplay = p.displayId;
@@ -116,12 +151,17 @@ export class OverlayManager extends EventEmitter {
           this.emit('sharedEmote', { ref, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedEmote);
           break;
         }
-        this.send(p.displayId, 'ping:spawn', { id: this.settings.clickPingId, x: p.x, y: p.y });
-        this.emit('shared', { id: this.settings.clickPingId, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedPing);
+        const ping = { id: this.settings.clickPingId, displayId: p.displayId, x: p.x, y: p.y };
+        if (ping.id === 'missing') this.prepareSelection(ping);
+        else {
+          this.send(p.displayId, 'ping:spawn', { id: ping.id, x: p.x, y: p.y });
+          this.emit('shared', ping satisfies SharedPing);
+        }
         break;
       }
       case 'cancel':
         this.cancelWheel();
+        this.cancelSelection();
         break;
       default:
         break;
@@ -179,17 +219,28 @@ export class OverlayManager extends EventEmitter {
   }
 
   async captureWithoutOverlays<T>(capture: () => Promise<T>): Promise<T> {
-    const visible = [...this.windows.values()].filter(w => !w.isDestroyed() && w.isVisible());
+    const visible = [...new Set([...this.windows.values(), ...this.captureWindows])].filter(w => !w.isDestroyed() && w.isVisible());
     for (const w of visible) w.hide();
     try {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Give the Windows compositor two 60 Hz frames to remove the overlay. Keep this
+      // fallback short: the user's ping is hidden until the screenshot has arrived.
+      // The longer macOS settle remains until that platform is measured separately.
+      if (visible.length) await new Promise(resolve => setTimeout(resolve, IS_MAC ? 100 : 34));
       return await capture();
     } finally {
       for (const w of visible) if (!w.isDestroyed()) w.showInactive();
     }
   }
 
+  /** Include an auxiliary app window in screen captures' hide/restore boundary. Ownership stays with its creator. */
+  registerCaptureWindow(window: BrowserWindow): () => void {
+    this.captureWindows.add(window);
+    return () => { this.captureWindows.delete(window); };
+  }
+
   destroy(): void {
+    this.cancelSelection();
+    this.captureWindows.clear();
     this.agentQueue = []; this.agentActive = null; this.ready.clear();
     for (const w of this.windows.values()) if (!w.isDestroyed()) w.destroy();
     this.windows.clear();
@@ -200,6 +251,26 @@ export class OverlayManager extends EventEmitter {
     if (this.wheelDisplay === null) return;
     this.send(this.wheelDisplay, 'wheel:cancel', null);
     this.wheelDisplay = null;
+  }
+
+  private prepareSelection(ping: SharedPing): void {
+    this.cancelSelection();
+    const requestId = ++this.selectionSequence;
+    this.selectionActive = { ...ping, requestId, selecting: false };
+    this.send(ping.displayId, 'selection:prepare', { x: ping.x, y: ping.y, requestId });
+  }
+
+  /** Cancels both the pending question animation and an already interactive region picker. */
+  cancelSelection(): void {
+    const active = this.selectionActive;
+    if (!active) return;
+    this.selectionActive = null;
+    this.send(active.displayId, 'selection:cancel', null);
+    const win = this.windows.get(active.displayId);
+    if (win && !win.isDestroyed()) {
+      win.setIgnoreMouseEvents(true);
+      win.setFocusable(false);
+    }
   }
 
   private displayOf(sender: WebContents): number | undefined {
@@ -213,6 +284,7 @@ export class OverlayManager extends EventEmitter {
   }
 
   private rebuild(): void {
+    this.cancelSelection();
     this.cancelWheel();
     const displays = screen.getAllDisplays();
     // The macOS helper already reports points in Electron's DIP space; dipToScreenRect only exists on Windows.
@@ -268,6 +340,7 @@ export class OverlayManager extends EventEmitter {
       this.pumpAgentQueue();
     });
     win.on('closed', () => {
+      if (this.selectionActive?.displayId === d.id) this.cancelSelection();
       this.ready.delete(d.id);
       this.agentQueue = this.agentQueue.filter(p => p.displayId !== d.id);
       if (this.agentActive?.displayId === d.id) this.agentActive = null;

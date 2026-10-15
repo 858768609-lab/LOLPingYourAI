@@ -164,7 +164,7 @@ export class AppTray {
     if (failed) items.push({ label: t.trayRestart, click: () => this.handlers.retryHelper() });
     items.push(
       { type: 'separator' },
-      { label: 'AI Teammate / 队友', click: () => this.handlers.teammate?.() },
+      { label: 'AI 队友', click: () => this.handlers.teammate?.() },
       { label: t.traySettings, click: () => this.handlers.openSettings() },
       { label: t.trayQuit, click: () => this.handlers.quit() },
     );

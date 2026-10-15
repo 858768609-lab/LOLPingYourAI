@@ -6,7 +6,7 @@ const object = (properties, required = []) => ({ type: 'object', properties, req
 const str = { type: 'string' }, num = { type: 'number' };
 export const toolDefinitions = [
   { name: 'get_context', description: 'Read the current ping, target, effective configuration and contextId before acting.', inputSchema: object({}) },
-  { name: 'screenshot', description: 'Capture the current target again, resolving its position. Returns a square image and coordinate mapping.', inputSchema: object({ contextId: str }, ['contextId']) },
+  { name: 'screenshot', description: 'Capture the current target again, or the exact screen rectangle previously selected by the user. Returns an image and global logical coordinate mapping; use imageWidth/imageHeight when mapping scaled image pixels.', inputSchema: object({ contextId: str }, ['contextId']) },
   { name: 'desktop_action', description: 'Operate only the current target window. x/y are GLOBAL LOGICAL desktop coordinates, not image pixels. Use current screenshot mapping. maximize and restore preserve the previous window bounds.', inputSchema: object({ contextId: str, action: { enum: ['click', 'type', 'key', 'scroll', 'maximize', 'restore'] }, x: num, y: num, text: str, key: str, delta: num, button: { enum: ['left', 'right'] } }, ['contextId', 'action']) },
   { name: 'reply_ping', description: 'Display an agent ping without moving the pointer or creating a new user event.', inputSchema: object({ contextId: str, signal: str, at: { enum: ['target', 'cursor'] }, caption: str }, ['contextId', 'signal']) },
   { name: 'save_handoff', description: 'Save a concise goal, progress and next step for future sessions.', inputSchema: object({ contextId: str, summary: str, goal: str }, ['contextId', 'summary']) },

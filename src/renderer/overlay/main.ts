@@ -12,6 +12,7 @@ import { DEFAULT_SETTINGS, overlaySettings, type OverlaySettings } from '../../s
 import { EmoteStage } from './emoteFx';
 import { spawnPing } from './pingFx';
 import { SoundBank } from './soundBank';
+import { RegionSelection } from './regionSelection';
 import { showToast } from './toast';
 import { Wheel, type WheelItem } from './wheel';
 
@@ -29,6 +30,11 @@ pingLayer.after(emoteLayer);
 
 const sounds = new SoundBank();
 const stage = new EmoteStage(emoteLayer);
+let pendingSelection: number | null = null;
+const selection = new RegionSelection((requestId, rect) => {
+  pendingSelection = null;
+  window.overlay.selectionResult(requestId, rect);
+});
 let settings: OverlaySettings = overlaySettings(DEFAULT_SETTINGS);
 const [fallbackPing] = pingsFor([DEFAULT_CLICK_PING]);
 const volume = (): number => (settings.muted ? 0 : settings.volume / 100);
@@ -91,7 +97,9 @@ window.overlay.on('wheel:release', (p) => {
     window.overlay.reportEmote(chosen.key, chosen.x, chosen.y);
   } else {
     const def = pingById(chosen.key) ?? fallbackPing;
-    ping(def, chosen.x, chosen.y);
+    // A local question plays once through the selection flow; previews and remote
+    // questions remain ordinary pings and never open an interactive picker.
+    if (def.id !== 'missing') ping(def, chosen.x, chosen.y);
     window.overlay.reportPing(def.id, chosen.x, chosen.y);
   }
 });
@@ -111,6 +119,15 @@ window.overlay.on('agent:ping', async (p) => {
 window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
 window.overlay.on('emote:clear', (p) => stage.clear(p.owner));
 window.overlay.on('toast:show', (t) => showToast(toastLayer, t.title, t.body));
+window.overlay.on('selection:prepare', async (p) => {
+  selection.hide(); pendingSelection = p.requestId;
+  await ping(pingById('missing')!, p.x, p.y);
+  if (pendingSelection === p.requestId) window.overlay.selectionReady(p.requestId);
+});
+window.overlay.on('selection:show', (p) => {
+  if (pendingSelection === p.requestId) selection.show(p.requestId, p.x, p.y, p.size);
+});
+window.overlay.on('selection:cancel', () => { pendingSelection = null; selection.hide(); });
 
 /** Resolves with `label` when the image at `url` doesn't load. */
 const probe = (url: string, label: string): Promise<string | null> =>

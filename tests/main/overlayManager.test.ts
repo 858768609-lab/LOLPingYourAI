@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EmoteArt } from '../../src/shared/emotes';
-import { OVERLAY_EMOTED, OVERLAY_PINGED } from '../../src/shared/ipc';
+import { OVERLAY_EMOTED, OVERLAY_PINGED, SELECTION_READY, SELECTION_RESULT } from '../../src/shared/ipc';
 import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 
 const h = vi.hoisted(() => ({
-  windows: [] as Array<{ x: number; webContents: { send: ReturnType<typeof vi.fn> } }>,
+  windows: [] as Array<{ x: number; visible: boolean; destroyed: boolean; hide: ReturnType<typeof vi.fn>; showInactive: ReturnType<typeof vi.fn>; setIgnoreMouseEvents: ReturnType<typeof vi.fn>; setFocusable: ReturnType<typeof vi.fn>; webContents: { send: ReturnType<typeof vi.fn> } }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
 }));
 
@@ -15,18 +15,25 @@ vi.mock('electron', async () => {
       return (h.windows as unknown as FakeWindow[]).find((w) => w.webContents === wc) ?? null;
     }
     x: number;
+    visible = true;
+    destroyed = false;
+    hide = vi.fn(() => { this.visible = false; });
+    showInactive = vi.fn(() => { this.visible = true; });
     webContents = Object.assign(new Emitter(), { send: vi.fn() });
     constructor(opts: { x: number }) {
       super();
       this.x = opts.x;
       h.windows.push(this);
     }
-    setIgnoreMouseEvents(): void {}
+    setIgnoreMouseEvents = vi.fn();
+    setFocusable = vi.fn();
+    show(): void { this.visible = true; }
+    focus(): void {}
     setAlwaysOnTop(): void {}
     setBounds(): void {}
-    showInactive(): void {}
+    isVisible(): boolean { return this.visible; }
     isDestroyed(): boolean {
-      return false;
+      return this.destroyed;
     }
     destroy(): void {}
   }
@@ -41,6 +48,55 @@ vi.mock('electron', async () => {
   });
   const ipcMain = { on: (channel: string, fn: (event: unknown, raw: unknown) => void) => h.handlers.set(channel, fn) };
   return { BrowserWindow: FakeWindow, ipcMain, screen };
+});
+
+afterEach(() => { vi.useRealTimers(); });
+
+describe('OverlayManager fallback screenshot visibility', () => {
+  it('captures after a short compositor settle and restores only windows that were visible', async () => {
+    vi.useFakeTimers();
+    h.windows[1].visible = false;
+    const capture = vi.fn(async () => {
+      expect(h.windows.every(w => !w.visible)).toBe(true);
+      return 'screenshot';
+    });
+    const result = mgr.captureWithoutOverlays(capture);
+    expect(h.windows[0].hide).toHaveBeenCalledOnce();
+    expect(h.windows[1].hide).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(33);
+    expect(capture).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toBe('screenshot');
+    expect(h.windows[0].showInactive).toHaveBeenCalledOnce();
+    expect(h.windows[1].showInactive).not.toHaveBeenCalled();
+  });
+
+  it('restores the overlay after capture fails', async () => {
+    vi.useFakeTimers();
+    const result = mgr.captureWithoutOverlays(async () => { throw new Error('capture failed'); });
+    const rejected = expect(result).rejects.toThrow('capture failed');
+    await vi.advanceTimersByTimeAsync(34);
+    await rejected;
+    expect(h.windows.every(w => w.visible)).toBe(true);
+  });
+
+  it('does not restore a window that was destroyed during capture', async () => {
+    vi.useFakeTimers();
+    const result = mgr.captureWithoutOverlays(async () => { h.windows[0].destroyed = true; });
+    await vi.advanceTimersByTimeAsync(34);
+    await result;
+    expect(h.windows[0].showInactive).not.toHaveBeenCalled();
+    expect(h.windows[1].showInactive).toHaveBeenCalledOnce();
+  });
+
+  it('does not delay a capture when no overlay needs hiding', async () => {
+    vi.useFakeTimers();
+    h.windows.forEach(w => { w.visible = false; });
+    const capture = vi.fn(async () => 'image');
+    await expect(mgr.captureWithoutOverlays(capture)).resolves.toBe('image');
+    expect(capture).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 vi.mock('../../src/main/paths', () => ({
@@ -168,6 +224,66 @@ describe('OverlayManager remote and preview emotes', () => {
     expect(sent(0)).toEqual([['emote:spawn', { owner: 'preview', art: art('nice', false), x: 960, y: 540 }]]);
     expect(sent(1)).toEqual([]);
     expect(shared).not.toHaveBeenCalled();
+  });
+});
+
+describe('local question screenshot selection', () => {
+  const from = (i = 0) => ({ sender: h.windows[i].webContents });
+  const question = (i = 0) => {
+    h.handlers.get(OVERLAY_PINGED)!(from(i), { id: 'missing', x: 300, y: 400 });
+    return (sent(i).filter(([ch]) => ch === 'selection:prepare').at(-1)![1] as { requestId: number }).requestId;
+  };
+  const ready = (requestId: number, i = 0) => h.handlers.get(SELECTION_READY)!(from(i), requestId);
+  const result = (requestId: number, selection: unknown, i = 0) => h.handlers.get(SELECTION_RESULT)!(from(i), { requestId, selection });
+
+  it('waits for the full question animation and explicit confirmation before sharing once', () => {
+    const shared = vi.fn(); mgr.on('shared', shared);
+    const requestId = question();
+    expect(shared).not.toHaveBeenCalled();
+    expect(sent(0).map(([ch]) => ch)).toEqual(['selection:prepare']);
+    result(requestId, { x: 20, y: 30, width: 640, height: 360 });
+    expect(shared).not.toHaveBeenCalled();
+    ready(requestId);
+    expect(h.windows[0].setFocusable).toHaveBeenLastCalledWith(true);
+    expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
+    expect(sent(0).at(-1)?.[0]).toBe('selection:show');
+    expect(shared).not.toHaveBeenCalled();
+    const selection = { x: 20, y: 30, width: 640, height: 360 };
+    result(requestId, selection); result(requestId, selection);
+    expect(shared).toHaveBeenCalledExactlyOnceWith({ id: 'missing', displayId: 1, x: 300, y: 400, selection });
+    expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
+    expect(h.windows[0].setFocusable).toHaveBeenLastCalledWith(false);
+    expect(sent(0).at(-1)?.[0]).toBe('selection:cancel');
+  });
+
+  it('does not open a stale picker after a newer question, including across displays', () => {
+    const old = question(), current = question(1);
+    ready(old); ready(current, 0);
+    expect(sent(0).some(([ch]) => ch === 'selection:show')).toBe(false);
+    ready(current, 1);
+    expect(sent(1).at(-1)?.[0]).toBe('selection:show');
+  });
+
+  it('cancel and invalid rectangles never send a question to AI', () => {
+    const shared = vi.fn(); mgr.on('shared', shared);
+    const requestId = question(); ready(requestId);
+    for (const selection of [{ x: -1, y: 0, width: 20, height: 20 }, { x: 1900, y: 0, width: 200, height: 200 }, { x: 0, y: 0, width: NaN, height: 20 }, { x: 0, y: 0, width: 0, height: 20 }]) result(requestId, selection);
+    expect(shared).not.toHaveBeenCalled();
+    result(requestId, null);
+    expect(h.windows[0].setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
+    expect(h.windows[0].setFocusable).toHaveBeenLastCalledWith(false);
+    ready(requestId); result(requestId, { x: 0, y: 0, width: 20, height: 20 });
+    expect(shared).not.toHaveBeenCalled();
+  });
+
+  it('routes click-bound questions through selection, while previews remain ordinary pings', () => {
+    mgr.updateSettings(overlaySettings({ ...DEFAULT_SETTINGS, clickPingId: 'missing' }));
+    const shared = vi.fn(); mgr.on('shared', shared);
+    mgr.handle({ type: 'click', x: 120, y: 150, wheel: 'ping' });
+    expect(sent(0)[0][0]).toBe('selection:prepare');
+    expect(shared).not.toHaveBeenCalled();
+    mgr.previewPing('missing');
+    expect(sent(0).at(-1)?.[0]).toBe('ping:spawn');
   });
 });
 

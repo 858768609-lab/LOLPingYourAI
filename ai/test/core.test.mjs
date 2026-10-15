@@ -31,6 +31,12 @@ test('read-only ping cannot operate desktop', async () => {
 
 test('config rejects invalid durations and mappings', () => {
   assert.equal(validateConfig().wardHours, 0.5);
+  assert.equal(validateConfig().responseEffort, 'low');
+  for (const responseEffort of ['low', 'medium', 'high', 'xhigh']) assert.equal(validateConfig({ responseEffort }).responseEffort, responseEffort);
+  assert.throws(() => validateConfig({ responseEffort: 'invalid' }));
+  assert.equal(validateConfig().model, '');
+  assert.equal(validateConfig({ model: 'gpt-6.1-sol' }).model, 'gpt-6.1-sol');
+  for (const model of [null, 42, 'model with spaces', 'bad\nmodel', 'x'.repeat(121)]) assert.throws(() => validateConfig({ model }));
   assert.throws(() => validateConfig({ sessionHours: NaN }));
   assert.throws(() => validateConfig({ mappings: { missing: { mode: 'shell', prompt: 'bad' } } }));
 });

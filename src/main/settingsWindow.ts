@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeImage, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
+import { release } from 'node:os';
 import { SETTINGS_CH } from '../shared/settingsChannels';
 import { assetPath, IS_MAC, loadPage, pageUrl, preloadPath } from './paths';
 
@@ -24,6 +25,9 @@ const captionColors = () => ({
   height: 40,
 });
 
+const supportsMica = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621;
+const opaqueBackground = () => nativeTheme.shouldUseDarkColors ? '#202020' : '#f3f3f3';
+
 /** Windows 11: Mica with custom caption buttons. macOS: sidebar vibrancy with inset traffic lights. */
 const chromeOptions = (): BrowserWindowConstructorOptions => (IS_MAC
   ? {
@@ -34,8 +38,8 @@ const chromeOptions = (): BrowserWindowConstructorOptions => (IS_MAC
     trafficLightPosition: { x: 20, y: 19 },
   }
   : {
-    backgroundMaterial: 'mica',
-    backgroundColor: '#00000000',
+    ...(supportsMica ? { backgroundMaterial: 'mica' as const } : {}),
+    backgroundColor: supportsMica ? '#00000000' : opaqueBackground(),
     titleBarStyle: 'hidden',
     titleBarOverlay: captionColors(),
   });
@@ -94,6 +98,7 @@ export function openSettingsWindow(section?: string): BrowserWindow {
   if (!IS_MAC) w.removeMenu(); // no menu bar, so pressing Alt in the window does nothing (macOS keeps the app menu)
   const onTheme = () => {
     if (!w.isDestroyed() && !IS_MAC) w.setTitleBarOverlay(captionColors());
+    if (!w.isDestroyed() && !IS_MAC && !supportsMica) w.setBackgroundColor(opaqueBackground());
   };
   nativeTheme.on('updated', onTheme);
   w.on('closed', () => {

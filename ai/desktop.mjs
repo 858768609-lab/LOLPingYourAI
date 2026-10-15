@@ -2,13 +2,13 @@ import { spawn } from 'node:child_process';
 import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { squareRegion, windowAnchor, anchoredPoint } from './geometry.mjs';
+import { squareRegion, selectedRegion, windowAnchor, anchoredPoint } from './geometry.mjs';
 
 export class Desktop {
   constructor({ electron, helper, dataDir, overlays, pingIds }) { Object.assign(this, { electron, helper, dataDir, overlays, pingIds }); this.savedBounds = new Map(); this.captureTail = Promise.resolve(); }
   native(op, args = {}) {
     return new Promise((resolve, reject) => {
-      const child = spawn(this.helper, [op], { stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+      const child = spawn(this.helper, [op], { stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });
       let output = '', error = ''; const timer = setTimeout(() => child.kill(), 15000);
       child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { error += d; });
       child.on('error', e => { clearTimeout(timer); reject(e); });
@@ -24,41 +24,60 @@ export class Desktop {
     return { ...w, bounds: this.electron.screen.screenToDipRect(null, w.bounds) };
   }
   async resolve(target) { return this.normalizeWindow(await this.native('resolve', { id: target.id, pid: target.pid })); }
-  capture(pointOrTarget, size, tracked = false) {
-    const job = this.captureTail.then(() => this.captureNow(pointOrTarget, size, tracked));
+  capture(pointOrTarget, size, tracked = false, selection) {
+    const job = this.captureTail.then(() => this.captureNow(pointOrTarget, size, tracked, selection));
     this.captureTail = job.catch(() => {}); return job;
   }
-  async captureNow(pointOrTarget, size, tracked) {
+  async captureNow(pointOrTarget, size, tracked, selection) {
     if (!await this.available()) throw new Error('Screen recording permission is missing or desktop is locked');
     if (!pointOrTarget) throw new Error('No target has been selected');
     const { screen, desktopCapturer } = this.electron;
     let target, point;
     if (tracked) { const w = await this.resolve(pointOrTarget); target = { ...w, relative: pointOrTarget.relative }; point = anchoredPoint(target, w.bounds); }
     else { point = pointOrTarget; const w = this.normalizeWindow(await this.native('target', this.toNativePoint(point))); target = windowAnchor(w, point); }
-    const display = screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) });
-    const region = squareRegion(point, size, { ...display.bounds, scaleFactor: display.scaleFactor });
-    const png = await this.overlays.captureWithoutOverlays(async () => {
-      const owner = await this.native('target', this.toNativePoint(point));
-      const useWindow = tracked || owner.id !== target.id;
-      const captureBounds = useWindow ? target.bounds : display.bounds;
-      const sources = await desktopCapturer.getSources({ types: [useWindow ? 'window' : 'screen'], thumbnailSize: { width: Math.round(captureBounds.width * display.scaleFactor), height: Math.round(captureBounds.height * display.scaleFactor) } });
-      const source = sources.find(s => useWindow ? s.id.split(':')[1] === String(target.id) : s.display_id === String(display.id));
-      if (useWindow) {
-        const x = Math.max(region.valid.x, target.bounds.x), y = Math.max(region.valid.y, target.bounds.y);
-        const right = Math.min(region.valid.x + region.valid.width, target.bounds.x + target.bounds.width), bottom = Math.min(region.valid.y + region.valid.height, target.bounds.y + target.bounds.height);
-        region.valid = { x: Math.round(x), y: Math.round(y), width: Math.round(right - x), height: Math.round(bottom - y) };
-        region.padding = { left: Math.round(x - region.x), top: Math.round(y - region.y) };
-        region.captureKind = 'window';
-      } else region.captureKind = 'screen';
-      if (!source || source.thumbnail.isEmpty()) throw new Error('No screenshot for target display');
-      const image = source.thumbnail, actual = image.getSize(), sx = actual.width / captureBounds.width, sy = actual.height / captureBounds.height;
-      const extract = { left: Math.max(0, Math.round((region.valid.x - captureBounds.x) * sx)), top: Math.max(0, Math.round((region.valid.y - captureBounds.y) * sy)), width: Math.round(region.valid.width * sx), height: Math.round(region.valid.height * sy) };
-      extract.width = Math.min(extract.width, actual.width - extract.left); extract.height = Math.min(extract.height, actual.height - extract.top);
-      if (extract.width < 1 || extract.height < 1) throw new Error('Target region is outside the display');
-      const cropped = await sharp(image.toPNG()).extract(extract).resize(region.valid.width, region.valid.height).png().toBuffer();
-      return sharp({ create: { width: size, height: size, channels: 4, background: '#151922' } }).composite([{ input: cropped, left: region.padding.left, top: region.padding.top }]).png().toBuffer();
-    });
-    region.imageScale = 1; region.imageWidth = size; region.imageHeight = size;
+    const selectedCenter = selection ? { x: selection.x + selection.width / 2, y: selection.y + selection.height / 2 } : point;
+    if (![selectedCenter.x, selectedCenter.y].every(Number.isFinite)) throw new Error('截图选区无效');
+    const display = screen.getDisplayNearestPoint({ x: Math.round(selectedCenter.x), y: Math.round(selectedCenter.y) });
+    const displayBounds = { ...display.bounds, scaleFactor: display.scaleFactor };
+    const region = selection ? selectedRegion(selection, displayBounds) : squareRegion(point, size, displayBounds);
+    const getSource = async (useWindow) => {
+      const bounds = useWindow ? target.bounds : display.bounds;
+      const sources = await desktopCapturer.getSources({ types: [useWindow ? 'window' : 'screen'], thumbnailSize: { width: Math.round(bounds.width * display.scaleFactor), height: Math.round(bounds.height * display.scaleFactor) } });
+      return sources.find(s => useWindow ? s.id.split(':')[1] === String(target.id) : s.display_id === String(display.id));
+    };
+    // Window capture excludes our overlays without interrupting their animation.
+    // An explicit selection instead captures exactly the selected screen area, including multiple windows.
+    let useWindow = !selection;
+    let source = useWindow ? await getSource(true) : null;
+    if (!source || source.thumbnail.isEmpty()) {
+      if (tracked && !selection) throw new Error('无法截取目标窗口，请恢复窗口后重试');
+      useWindow = false;
+      if (!selection) {
+        const owner = await this.native('target', this.toNativePoint(point));
+        if (String(owner.id) !== String(target.id)) throw new Error('目标窗口已被遮挡，请重新发送信号');
+      }
+      source = await this.overlays.captureWithoutOverlays(() => getSource(false));
+    }
+    const captureBounds = useWindow ? target.bounds : display.bounds;
+    if (useWindow) {
+      const x = Math.max(region.valid.x, target.bounds.x), y = Math.max(region.valid.y, target.bounds.y);
+      const right = Math.min(region.valid.x + region.valid.width, target.bounds.x + target.bounds.width), bottom = Math.min(region.valid.y + region.valid.height, target.bounds.y + target.bounds.height);
+      region.valid = { x: Math.round(x), y: Math.round(y), width: Math.round(right - x), height: Math.round(bottom - y) };
+      region.padding = { left: Math.round(x - region.x), top: Math.round(y - region.y) };
+      region.captureKind = 'window';
+    } else region.captureKind = 'screen';
+    if (!source || source.thumbnail.isEmpty()) throw new Error('No screenshot for target display');
+    const image = source.thumbnail, actual = image.getSize(), sx = actual.width / captureBounds.width, sy = actual.height / captureBounds.height;
+    const extract = { left: Math.max(0, Math.round((region.valid.x - captureBounds.x) * sx)), top: Math.max(0, Math.round((region.valid.y - captureBounds.y) * sy)), width: Math.round(region.valid.width * sx), height: Math.round(region.valid.height * sy) };
+    extract.width = Math.min(extract.width, actual.width - extract.left); extract.height = Math.min(extract.height, actual.height - extract.top);
+    if (extract.width < 1 || extract.height < 1) throw new Error('Target region is outside the display');
+    // Encode only the selected native pixels, after overlays are visible again.
+    const croppedImage = image.crop({ x: extract.left, y: extract.top, width: extract.width, height: extract.height });
+    const cropped = await sharp(croppedImage.toPNG()).resize(region.valid.width, region.valid.height).png().toBuffer();
+    const factor = Math.min(1, 2048 / Math.max(region.width, region.height));
+    const imageWidth = Math.round(region.width * factor), imageHeight = Math.round(region.height * factor);
+    const png = await sharp({ create: { width: region.width, height: region.height, channels: 4, background: '#151922' } }).composite([{ input: cropped, left: region.padding.left, top: region.padding.top }]).resize(imageWidth, imageHeight).png().toBuffer();
+    region.imageScale = imageWidth / region.width; region.imageScaleY = imageHeight / region.height; region.imageWidth = imageWidth; region.imageHeight = imageHeight;
     const dir = join(this.dataDir, 'captures'); await mkdir(dir, { recursive: true, mode: 0o700 });
     const imagePath = join(dir, `ping-${Date.now()}.png`); await writeFile(imagePath, png, { mode: 0o600 });
     // Keep a bounded local diagnostic history; never delete the just-captured image.

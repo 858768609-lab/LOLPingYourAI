@@ -6,7 +6,7 @@
 
 **在桌面任何地方 ping 一下，AI 队友立刻拿到上下文。**
 
-按住 <kbd>⌥ Option</kbd> 拖动，松开选中信号。像在峡谷里打信号一样，把你指着的地方、它所在的窗口和这个信号的意思一起发给 Codex 或 Claude 队友。它会反 ping 你、解释、动手操作那个窗口；你喊一声 **危险**，它马上停下。
+Windows 按住 <kbd>Alt</kbd>，macOS 按住 <kbd>⌥ Option</kbd>，配合鼠标左键拖动，松开选中信号。像在峡谷里打信号一样，把你指着的地方、它所在的窗口和这个信号的意思一起发给 Codex 或 Claude 队友。它会反 ping 你、解释、动手操作那个窗口；你喊一声 **危险**，它马上停下。
 
 <a href="https://github.com/ChristianYang37/LOLPingYourAI/releases/latest"><img src="https://img.shields.io/github/v/release/ChristianYang37/LOLPingYourAI?label=release&color=c8aa6e&labelColor=0a1428" alt="最新版本"></a>
 <a href="https://github.com/ChristianYang37/LOLPingYourAI/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ChristianYang37/LOLPingYourAI/ci.yml?branch=main&label=CI&labelColor=0a1428" alt="CI"></a>
@@ -24,11 +24,20 @@
 
 </div>
 
+## 本分支改动
+
+- **默认简体中文界面**，包含 AI 队友设置和各信号的指令。
+- **问号截图可自行框选**：先完整播放问号图标动画，再出现可移动、缩放的截图框，也可重新拖动框选。点击**发送截图**或按 <kbd>Enter</kbd> 才发送，<kbd>Esc</kbd> 取消且不发送。
+- **独立桌面回复窗口**：设置窗口关闭后仍可查看实时进度和流式回答，支持拖动、缩放、置顶和隐藏。应用需要继续在托盘运行并启用信号。
+- **应用内设置 Codex 模型和思考强度**：在 **AI 队友 → 使用模型／响应速度** 中设置，对下一次信号生效。默认继承 Codex 模型，并使用较少思考的快速响应；不会修改 Codex 全局配置，模型可用性取决于账号。
+
+上方版本下载链接和演示素材来自上游项目。本分支的改动请从源码构建，Windows 步骤见下文。
+
 ## 为什么做这个
 
 打字描述“右边 PDF 第二个公式，为什么要除以 √d？”，往往比问题本身还费劲。在峡谷里，你只会打一个信号。LOLPingYourAI 把这件事搬到桌面上，一个手势同时交给 AI 队友三样东西：
 
-- **哪里**：鼠标周围 512×512 的正方形区域，并能换算回真实的屏幕坐标。
+- **哪里**：问号使用你确认的矩形选区，其他截图信号默认使用鼠标周围 512×512 的正方形区域，并能换算回真实的屏幕坐标。
 - **什么**：区域所在的窗口，包括应用、标题、位置和稳定的窗口 ID。
 - **想干嘛**：信号对应的指令，例如*解释一下*、*帮我做完*、*停下*、*30 分钟后再来看看*。
 
@@ -71,12 +80,14 @@ sequenceDiagram
   actor You as 你
   participant App as LOLPingYourAI
   participant AI as Codex / Claude
-  You->>App: ⌥ 拖动，在「？」上松开
-  Note over App: 截取 512×512 区域<br/>和窗口身份
+  You->>App: Alt / ⌥ 拖动，在「？」上松开
+  App-->>You: 完整播放图标后显示截图框
+  You->>App: 调整选区并确认发送
+  Note over App: 截取所选矩形区域<br/>和窗口身份
   App->>AI: 信号含义 + 截图 + 上下文
   AI->>App: MCP get_context、screenshot
-  AI->>App: MCP reply_ping「正在路上」
-  App-->>You: 屏幕上的反 ping + 回答
+  App-->>You: 桌面回复窗口显示进度和流式回答
+  AI->>App: 可选的 MCP reply_ping
   You->>App: 对未完成的工作发求助
   AI->>App: MCP desktop_action（仅限该窗口）
   You->>App: 危险！
@@ -86,7 +97,36 @@ sequenceDiagram
 
 沿用 lolPing 的原生输入助手，负责按下、拖动、松开和取消。确认后的 ping 会截图，并交给一个**持续存在的队友会话**：多次 ping 共用同一线程，闲置 2 小时后带着简短交接安全换新。agent 通过本地 MCP 服务工作，可用工具有 `get_context`、`screenshot`、`desktop_action`、`reply_ping`、`save_handoff`、`ward` 和 `submit_icon`。所有桌面操作经同一个闸门串行执行，一次纠正会让此前的旧操作全部失效。详见 [docs/architecture.md](docs/architecture.md)。
 
-## 快速开始（macOS）
+## 快速开始（Windows，从源码构建）
+
+准备 Node.js 22+、pnpm 10、包含**使用 C++ 的桌面开发**工作负载的 Visual Studio Build Tools，以及 .NET Framework C# 编译器。安装 [Codex CLI](https://developers.openai.com/codex/cli/) 并执行 `codex login` 登录；应用也会自动查找 Codex 桌面应用安装的 CLI。下载或克隆本仓库后，在仓库根目录用 PowerShell 执行：
+
+```powershell
+pnpm install --frozen-lockfile --ignore-scripts
+node node_modules/electron/install.js
+pnpm build:helper
+pnpm build:desktop
+pnpm dev
+```
+
+若要生成可直接运行的程序目录，不生成安装包，先退出开发实例，再执行：
+
+```powershell
+pnpm build
+pnpm exec electron-builder --win --dir --publish never
+.\启动中文版.cmd
+```
+
+启动脚本会打开 `release\win-unpacked\LOLPingYourAI.exe`。需要 Windows 安装包时运行 `pnpm dist`，该命令也会构建两套原生助手和应用。
+
+1. 在托盘启用信号。按住 <kbd>Alt</kbd> + 鼠标左键拖动选择信号；<kbd>Ctrl</kbd> + 鼠标左键拖动打开表情轮盘。
+2. 在 **？** 上松开，等待完整图标动画结束，调整截图框后点击**发送截图**或按 <kbd>Enter</kbd>。<kbd>Esc</kbd> 取消。
+3. 在独立桌面回复窗口查看进度和回答。可在 **AI 队友** 中设置其显示、置顶行为；关闭设置窗口后仍可查看回复。
+4. 选**撤退**或按 <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Esc</kbd> 停止队友。
+
+若找不到 Codex，可在启动前用环境变量 `LOLPINGAI_CODEX` 指定 CLI 可执行文件路径。Windows 不需要设置 macOS 的辅助功能或录屏权限。
+
+## 快速开始（macOS，上游发行版）
 
 1. **安装**：在 [Releases](https://github.com/ChristianYang37/LOLPingYourAI/releases/tag/v0.1.0) 下载 **LOLPingYourAI-0.1.0-arm64.dmg**，把应用拖进「应用程序」。请先退出原版 lolPing，同一时间只应运行一个全局输入助手。
 2. **连接队友**：安装 [Codex CLI](https://developers.openai.com/codex/cli/) 并执行 `codex login`；Codex 桌面应用自带的 CLI 会被自动找到。Claude 目前为实验性支持（见[平台状态](#平台状态)）。
@@ -117,9 +157,10 @@ sequenceDiagram
 | --- | --- |
 | macOS Apple Silicon＋**Codex** | ✅ 已用真实模型跑通桌面闭环（解释、编辑、中断、恢复、最大化、插眼），提供 DMG |
 | macOS＋**Claude** | 🧪 实验性 Agent SDK 适配器，带只读上下文工具；已有测试覆盖，尚未用已登录账号实测 |
-| Windows＋Codex／Claude | 🛠️ 已包含适配器、Win32 助手和安装脚本；尚未在 Windows 实机验证 |
+| Windows 10 x64＋**Codex** | ✅ 已在单显示器本机验证构建与启动、中文输入、自选截图与取消、真实模型只读回复及独立桌面回复窗口；物理多显示器和混合 DPI 尚未验证 |
+| Windows＋**Claude** | 🧪 已包含适配器，尚未使用已登录账号验证真实运行 |
 
-哪些真正测过、哪些没有，都记录在 [docs/verification.md](docs/verification.md)。
+上面的 Windows 结论适用于本分支。[docs/verification.md](docs/verification.md) 保留上游的验证记录。
 
 ## 安全与隐私
 
@@ -156,7 +197,7 @@ node ai/cli.mjs stop
 需要 Node 22+、pnpm 10；macOS 需要 Xcode 命令行工具，Windows 需要 Visual Studio C++ 构建工具和 .NET Framework C# 编译器。
 
 ```sh
-git clone https://github.com/ChristianYang37/LOLPingYourAI.git
+# 请先使用当前仓库 Code 按钮中的地址克隆本分支。
 cd LOLPingYourAI
 pnpm install --frozen-lockfile --ignore-scripts
 node node_modules/electron/install.js
@@ -194,7 +235,7 @@ pnpm dist                                       # Windows x64 安装包（需在
 
 ## 欢迎参与
 
-- 在 **Windows** 上跑一跑，告诉我们哪里坏了。
+- 验证更多 **Windows** 环境（包括 Windows 11），反馈兼容性问题。
 - 用**已登录的 Claude** 按[验收步骤](docs/acceptance.md)完整走一遍。
 - 物理多显示器、混合 DPI、睡眠／锁屏场景测试。
 - macOS 版本的 Developer ID 签名与公证。

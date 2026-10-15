@@ -1,11 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { EmoteRef } from '../shared/emotes';
 import {
-  AGENT_PING_ENDED, OVERLAY_ASSETS, OVERLAY_CHANNELS, OVERLAY_EMOTED, OVERLAY_PINGED, type OverlayChannel, type OverlayEvents,
+  AGENT_PING_ENDED, OVERLAY_ASSETS, OVERLAY_CHANNELS, OVERLAY_EMOTED, OVERLAY_PINGED, SELECTION_READY, SELECTION_RESULT,
+  type OverlayChannel, type OverlayEvents, type ScreenshotSelection,
 } from '../shared/ipc';
 import type { PingId } from '../shared/pings';
 
 const api = {
+  selectionReady(requestId: number): void { ipcRenderer.send(SELECTION_READY, requestId); },
+  selectionResult(requestId: number, selection: ScreenshotSelection | null): void { ipcRenderer.send(SELECTION_RESULT, { requestId, selection }); },
   agentPingEnded(requestId: number): void { ipcRenderer.send(AGENT_PING_ENDED, requestId); },
   on<C extends OverlayChannel>(channel: C, cb: (payload: OverlayEvents[C]) => void): void {
     if (!OVERLAY_CHANNELS.includes(channel)) throw new Error(`unknown overlay channel: ${channel}`);

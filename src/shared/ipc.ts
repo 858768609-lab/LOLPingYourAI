@@ -11,6 +11,9 @@ export interface Point {
   y: number;
 }
 
+/** A screenshot rectangle in display-local CSS pixels. */
+export interface ScreenshotSelection extends Point { width: number; height: number }
+
 /** The name tag under a room member's ping. `color` indexes TAG_COLORS. */
 export interface PingTag {
   name: string;
@@ -32,13 +35,16 @@ export interface OverlayEvents {
   'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag };
   'emote:clear': { owner: string };
   'toast:show': { title: string; body: string };
+  'selection:prepare': Point & { requestId: number };
+  'selection:show': Point & { requestId: number; size: number };
+  'selection:cancel': null;
 }
 
 export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
   'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'emote:spawn', 'emote:clear',
-  'toast:show', 'agent:ping',
+  'toast:show', 'agent:ping', 'selection:prepare', 'selection:show', 'selection:cancel',
 ];
 
 /** overlay renderer → main: string[] of asset files that failed to load. */
@@ -49,6 +55,8 @@ export const OVERLAY_PINGED = 'overlay:pinged';
 export const OVERLAY_EMOTED = 'overlay:emoted';
 /** Completion means both the visual and audio have ended. */
 export const AGENT_PING_ENDED = 'overlay:agent-ping-ended';
+export const SELECTION_READY = 'overlay:selection-ready';
+export const SELECTION_RESULT = 'overlay:selection-result';
 
 export interface AppStatus {
   enabled: boolean;

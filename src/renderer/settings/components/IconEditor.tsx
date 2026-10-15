@@ -20,19 +20,19 @@ export function IconEditor({ onChange }: { onChange: (png: string | undefined) =
       }
       onChange(canvas.current.toDataURL('image/png').split(',')[1]);
     };
-    image.onerror = () => setError('Cannot decode this image.'); image.src = url;
+    image.onerror = () => setError('无法读取这张图片，请更换 PNG、JPEG 或 WebP 图片。'); image.src = url;
     return () => { disposed = true; };
   }, [url, zoom, x, y, clear]);
   return <div>
-    <label>Reference / crop image · 参考图或裁切图片<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
+    <label>参考图与图片裁切<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
       const f = e.target.files?.[0]; if (!f) return;
-      if (f.size > 8 * 1024 * 1024) { setError('Choose an image under 8 MB.'); return; }
+      if (f.size > 8 * 1024 * 1024) { setError('请选择小于 8 MB 的图片。'); return; }
       const r = new FileReader(); r.onload = () => { setUrl(String(r.result)); setZoom(1); setX(50); setY(50); setError(''); }; r.readAsDataURL(f);
     }} /></label>
     {url && <><canvas ref={canvas} width={256} height={256} style={{ width: 160, height: 160, background: 'repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%) 0/20px 20px' }} />
-      {[[zoom, setZoom, 1, 4, .05, 'Zoom'], [x, setX, 0, 100, 1, 'Horizontal'], [y, setY, 0, 100, 1, 'Vertical']].map(([value, setter, min, max, step, label]: any[]) => <label key={label}>{label}<input type="range" value={value} min={min} max={max} step={step} onChange={e => setter(Number(e.target.value))} /></label>)}
-      <label className="ai-check"><input type="checkbox" checked={clear} onChange={e => setClear(e.target.checked)} />Remove flat background / 去除纯色背景</label>
-      <button onClick={() => setUrl('')}>Clear reference / 清除参考图</button></>}
+      {[[zoom, setZoom, 1, 4, .05, '缩放'], [x, setX, 0, 100, 1, '水平位置'], [y, setY, 0, 100, 1, '垂直位置']].map(([value, setter, min, max, step, label]: any[]) => <label key={label}>{label}<input type="range" value={value} min={min} max={max} step={step} onChange={e => setter(Number(e.target.value))} /></label>)}
+      <label className="ai-check"><input type="checkbox" checked={clear} onChange={e => setClear(e.target.checked)} />去除纯色背景</label>
+      <button onClick={() => setUrl('')}>清除参考图</button></>}
     {error && <p role="alert">{error}</p>}
   </div>;
 }

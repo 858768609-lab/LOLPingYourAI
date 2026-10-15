@@ -109,3 +109,25 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 }
 @keyframes toastIn { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } }
 @keyframes toastOut { to { transform: translateY(12px); opacity: 0 } }
+
+/* Screenshot picker is enabled only after the question animation has completed. */
+.region-selection { display: none; position: fixed; inset: 0; z-index: 100; cursor: crosshair; color: #fff; font: 14px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; }
+.region-selection.active { display: block; }
+.selection-box { position: absolute; box-sizing: border-box; border: 2px solid #57d9f5; box-shadow: 0 0 0 9999px #07101cb3; cursor: move; }
+.selection-size { position: absolute; left: 8px; top: 8px; padding: 2px 8px; border-radius: 4px; background: #07101cd9; pointer-events: none; font-variant-numeric: tabular-nums; }
+.selection-help { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); max-width: calc(100% - 32px); padding: 9px 16px; border: 1px solid #ffffff2b; border-radius: 8px; background: #101b2df0; z-index: 2; text-align: center; pointer-events: none; }
+.selection-toolbar { position: absolute; height: 44px; display: flex; gap: 8px; justify-content: flex-end; z-index: 3; cursor: default; }
+.selection-toolbar button { font: inherit; color: #fff; background: #1b273c; border: 1px solid #ffffff45; border-radius: 7px; padding: 8px 15px; cursor: pointer; box-shadow: 0 3px 14px #0005; }
+.selection-toolbar button:hover { background: #30425f; }
+.selection-toolbar button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.selection-toolbar .selection-send { color: #06202b; background: #57d9f5; border-color: #8de8ff; font-weight: 600; }
+.selection-toolbar .selection-send:hover { background: #92ebff; }
+.selection-handle { position: absolute; width: 12px; height: 12px; box-sizing: border-box; background: #fff; border: 2px solid #30bbdd; border-radius: 2px; z-index: 1; }
+.handle-n, .handle-s { left: calc(50% - 6px); cursor: ns-resize; }
+.handle-w, .handle-e { top: calc(50% - 6px); cursor: ew-resize; }
+.handle-n, .handle-nw, .handle-ne { top: -7px; }
+.handle-s, .handle-sw, .handle-se { bottom: -7px; }
+.handle-w, .handle-nw, .handle-sw { left: -7px; }
+.handle-e, .handle-ne, .handle-se { right: -7px; }
+.handle-nw, .handle-se { cursor: nwse-resize; }
+.handle-ne, .handle-sw { cursor: nesw-resize; }

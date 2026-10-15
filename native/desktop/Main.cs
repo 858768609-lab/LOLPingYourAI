@@ -14,7 +14,11 @@ class DesktopHelper {
     delegate bool EnumProc(IntPtr h, IntPtr p);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr p);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out Rect r);
+    [DllImport("user32.dll", EntryPoint="GetWindowLongW")] static extern int GetWindowLong(IntPtr h, int index);
+    [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attribute, out int value, int size);
+    [DllImport("user32.dll")] static extern bool GetLayeredWindowAttributes(IntPtr h, out uint color, out byte alpha, out uint flags);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder text, int count);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
@@ -30,6 +34,17 @@ class DesktopHelper {
     static double N(Dictionary<string,object> d, string key) { return d.ContainsKey(key) ? Convert.ToDouble(d[key]) : 0; }
     static string S(Dictionary<string,object> d, string key) { return d.ContainsKey(key) ? Convert.ToString(d[key]) : ""; }
     static Dictionary<string,object> Bounds(Rect r) { return new Dictionary<string,object>{{"x",r.Left},{"y",r.Top},{"width",r.Right-r.Left},{"height",r.Bottom-r.Top}}; }
+    static bool CanPointAt(IntPtr h) {
+        // EnumWindows can include shell-cloaked WinUI windows even when
+        // IsWindowVisible is true; they must not steal the window under a ping.
+        int style=GetWindowLong(h,-20);
+        if(IsIconic(h) || (style & 0x20)!=0)return false;
+        uint color,flags; byte alpha;
+        // Some overlays use zero global alpha without WS_EX_TRANSPARENT.
+        if((style & 0x80000)!=0 && GetLayeredWindowAttributes(h,out color,out alpha,out flags) && (flags & 2)!=0 && alpha==0)return false;
+        int cloaked;
+        return DwmGetWindowAttribute(h,14,out cloaked,4)!=0 || cloaked==0;
+    }
     static List<Dictionary<string,object>> Windows(int exclude) {
         var result = new List<Dictionary<string,object>>();
         EnumWindows((h,p) => { uint pid; GetWindowThreadProcessId(h,out pid); Rect r; var title=new StringBuilder(1024); GetWindowText(h,title,1024);
@@ -42,6 +57,8 @@ class DesktopHelper {
     static void Key(ushort vk, ushort scan, uint flags) { Send(new Input{type=1,data=new InputUnion{keyboard=new Keyboard{vk=vk,scan=scan,flags=flags}}}); }
     static void Main(string[] argv) {
         try {
+            Console.InputEncoding = new UTF8Encoding(false);
+            Console.OutputEncoding = new UTF8Encoding(false);
             try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch {}
             var args=json.Deserialize<Dictionary<string,object>>(Console.In.ReadToEnd()) ?? new Dictionary<string,object>();
             string op=argv.Length>0?argv[0]:"doctor"; object result=new {ok=true};
@@ -55,6 +72,10 @@ class DesktopHelper {
                     if(locked)throw new Exception("Desktop is locked");
                     Dictionary<string,object> target=null;
                     foreach(var w in windows) { var b=(Dictionary<string,object>)w["bounds"];
+                        // A click-through overlay (including a second lolPing instance) is not the
+                        // window the user pointed at. Keep it in the windows/resolve APIs, but look
+                        // through WS_EX_TRANSPARENT during point-based target selection.
+                        if(op=="target" && !CanPointAt(new IntPtr(long.Parse(S(w,"id")))))continue;
                         if(op=="target" ? N(args,"x")>=N(b,"x") && N(args,"x")<N(b,"x")+N(b,"width") && N(args,"y")>=N(b,"y") && N(args,"y")<N(b,"y")+N(b,"height") : S(w,"id")==S(args,"id") && N(w,"pid")==N(args,"pid")) { target=w;break; }
                     }
                     if(target==null)throw new Exception("Target window closed or changed");
